@@ -263,24 +263,35 @@ function cp_strs_import_form($form, &$form_state, $scheduleID, $cruiseID, $cruis
     }
   }
   
-  $options = cp_strs_orgs_dropdown();
+  //$options = cp_strs_orgs_dropdown();
   
   foreach($members as $member){
     if(!array_key_exists($member['ID'], $form)){
       $form[$member['ID']] = array(
-        '#type' => 'select',
+        //'#type' => 'select',
+        //'#options' => $options,
+        '#type' => 'textfield',
+        '#field_name' => $member['ID'],
+        '#field_parents' => array(),
+        '#autocomplete_path' => 'taxonomy/autocomplete/field_organization',
+        '#element_validate' => array('taxonomy_autocomplete_validate'),
+        '#language' => LANGUAGE_NONE,
+        '#maxlength' => 1024,
         '#title' => t('Institution for '.$member['type'].': '.$member['name'] ),
         '#required' => FALSE,
-        '#options' => $options,
+        
       );
     
       $inst = cp_strs_inst_by_abbr($member['inst']);
       if( $inst ){
         $form[$member['ID']]['#default_value'] = $inst;
       }
+      
+      //ensure the autocomplete field validates & creates new Organization if necessary
+      cp_utils_add_existing_field_to_custom_form($form_state, 'node', 'field_organization', 'cruise_party_member', $member['ID']);
     }
   }
-  
+   
   $form['submit'] = array(
     '#type' => 'submit',
     '#value' => 'Import',
@@ -325,7 +336,9 @@ function cp_strs_inst_by_abbr($abbrev){
     ->execute();
   if(count($result) == 1 ){
     foreach ($result as $item) {
-      return $item->entity_id;
+      //return $item->entity_id;
+      $org = taxonomy_term_load($item->entity_id);
+      return $org->name;
     }
   }
   
@@ -431,7 +444,7 @@ function _cp_strs_save_cruise($strs, $values){
   
   /* the call to use the migrate module */
   //_cp_strs_migrate($cruise, $form_state['values']);
-  
+    
   global $user;
   if ( !$user->uid ) {
     drupal_set_message('You must be logged in to import ship time requests', 'error');
@@ -589,7 +602,14 @@ function _cp_strs_save_cruise($strs, $values){
     $party_member = new stdClass();
     $party_member->info = $strs['ChiefScientist'];
     $party_member->roles = array($term_chief_sci => $term_chief_sci);
-    $party_member->inst = (string)$values[$strs['ChiefScientist']['ID']];
+    
+    if( is_array($values[$strs['ChiefScientist']['ID']]) ){
+      $party_member->inst = (string)$values[$strs['ChiefScientist']['ID']]['0']['tid'];
+    } else {
+      $party_member->inst = (string)$values[$strs['ChiefScientist']['ID']];
+    }
+    
+    
     $members[$strs['ChiefScientist']['ID']] = $party_member;
   }
   
@@ -610,7 +630,13 @@ function _cp_strs_save_cruise($strs, $values){
         $party_member = new stdClass();
         $party_member->info = $agency['AssociatedMember'];
         $party_member->roles = array($term_PI => $term_PI);
-        $party_member->inst = (string)$values[$agency['AssociatedMember']['ID']];
+        
+        if( is_array($values[$agency['AssociatedMember']['ID']]) ){
+          $party_member->inst = (string)$values[$agency['AssociatedMember']['ID']]['0']['tid'];
+        } else {
+          $party_member->inst = (string)$values[$agency['AssociatedMember']['ID']];
+        }
+        
       } else {
         $party_member->roles[$term_PI] = $term_PI;
       }      
@@ -664,6 +690,8 @@ function _cp_strs_cruise_member_create($cruise, $member){
   $form_state['values'][OG_AUDIENCE_FIELD][LANGUAGE_NONE]['0'] = $cruise->nid;
   
   $form_state['values']['field_cruise_party_member_name'][LANGUAGE_NONE]['0']['value'] = _cp_strs_get_person_name($member->info);
+  
+  
   
   if( $member->inst != '0' ){
     $t = taxonomy_term_load($member->inst);

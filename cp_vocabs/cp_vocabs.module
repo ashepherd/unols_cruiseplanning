@@ -137,11 +137,11 @@ function cp_vocabs_menu() {
   return $items;
 }
 
-function cp_vocabs_rdf_namespaces(){
-  return array(
-    'dc'       => 'http://purl.org/dc/elements/1.1/',
-    'dcterms'       => 'http://purl.org/dc/terms/',
-  );
+function cp_vocabs_get_rdf_namespaces(){
+  $ns = rdf_get_namespaces();
+  $ns['dc']       = 'http://purl.org/dc/elements/1.1/';
+  $ns['dcterms']  = 'http://purl.org/dc/terms/';
+  return $ns;
 }
 
 function cp_vocabs_taxonomy_term_presave($term) {
@@ -149,7 +149,8 @@ function cp_vocabs_taxonomy_term_presave($term) {
 
   //guid is a property attached to taxonomy terms by taxonomy_xml
   if ($term->guid) {
-    $ns = cp_vocabs_rdf_namespaces();
+    
+    $ns = cp_vocabs_get_rdf_namespaces();
     if ($term->type == $ns['skos'] . 'Concept') {
 
       if ($term->predicates && !empty($term->predicates)) {

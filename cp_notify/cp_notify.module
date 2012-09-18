@@ -1,0 +1,229 @@
+<?php
+
+define('CP_NOTIFY_ADD','add');
+define('CP_NOTIFY_EDIT','edit');
+define('CP_NOTIFY_DELETE','delete');
+
+function cp_notify_email($params){
+  global $user;
+  
+  $site_email = variable_get('site_mail',FALSE);
+  
+  if( empty($params) || !array_key_exists('node', $params) || !array_key_exists('action', $params)){
+    watchdog('cp_notify', 'Cannot send notification emails without parameters', WATCHDOG_WARNING);
+    return;
+  }
+  
+  $node = $params['node'];
+  
+  $account = user_load($node->revision_uid);
+  $from = empty($account) ? $site_email : $account->mail;
+
+  if( empty($from) ){
+    watchdog('cp_notify', 'Cannot send notification emails without a \'From:\'. Please specify the default email address for this Drupal site.', WATCHDOG_WARNING);
+    return;
+  }
+  
+  $cruise = cp_og_get_cruise_for_content($node);
+  if( $cruise ){
+    
+    if( array_key_exists(cp_notify_get_skip_notification_key($cruise), $_SESSION) ){
+      return;
+    }
+    
+    $cruise_editors = cp_notify_get_cruise_editors($cruise->nid);
+    $operators = cp_notify_get_operators();
+    
+    $site_name = cp_utils_get_site_name();
+    
+    $node_type = node_type_get_name($node);
+    
+    if( $node->type == 'funding'){
+      $node_type .= ' record';
+    } 
+    
+    // hide the distinction between a Cruise & Cruise Plan 
+    // by saying when a cruise plan is added, that the Cruise has been edited
+    if( $node->type == 'cruise_plan' && $params['action'] == CP_NOTIFY_ADD ){
+      $params['action'] = CP_NOTIFY_EDIT;
+    }
+    
+    $is_cruise = $node->nid == $cruise->nid;
+    $multiple_type = cp_utils_is_multiple_node_type($node->type);
+    
+    $subject = '['.$site_name.'] ';
+    $body = cp_utils_get_url('node/'.$cruise->nid)." \n\n";
+    
+    $op = $params['action'];
+    
+    $notify_editors = TRUE;
+    $notify_ops = cp_notify_is_notify_operators($node, $cruise, $op);
+    
+    switch( $op ){
+      case CP_NOTIFY_ADD:
+        
+        $subject .= 'A new '.$node_type.' has been added';
+        $subject .= $is_cruise ? '' : ' to '.$cruise->title;
+        
+        $body .= 'Added by '.cp_utils_get_user_name($account). ' on ' . format_date(time());
+        $body .= "\n\n".drupal_render(node_view($node));
+        
+        break;
+      
+      case CP_NOTIFY_EDIT:
+
+        if( $is_cruise ){
+          $node_type = 'Cruise Information';
+        } 
+        $subject .= $multiple_type ? 'A ' : 'The ';
+        $subject .= $node_type.' has been edited for '.$cruise->title;
+        
+        $body .= 'Edited by '.cp_utils_get_user_name($account). ' on ' . format_date(time());
+
+        if( module_exists('cp_diff') ){
+          
+          $changes = cp_diff_view_changes(cp_diff_latest($node));
+          if( strlen($changes) > 0 ){
+            $body .= "\n\n".$changes;
+          } else {
+            //don't notify if nothing changed
+            return;
+          }
+        }
+        
+        break;
+      
+      case CP_NOTIFY_DELETE:
+        
+        $subject .= $multiple_type ? 'A ' : 'The ';
+        $subject .= $node_type;
+        if( $is_cruise ){
+          $subject .= ', '.$cruise->title.',';
+          //send the link to the My Cruises
+          $body = cp_utils_get_url('')." \n\n";
+        }
+        $subject .= ' has been deleted ';
+        if( !$is_cruise ){
+          $subject .=  'for '.$cruise->title;
+        }
+        
+        $body .= 'Deleted by '.cp_utils_get_user_name($account). ' on ' . format_date(time());
+        $body .= "\n\n".drupal_render(node_view($node));
+        
+        break;
+      
+      default:
+        $subject .= 'Something has changed on '.$cruise->$title;
+        
+        $body .= 'Changed by '.cp_utils_get_user_name($account);
+        
+        break;
+    }
+    
+    $params['subject'] = $subject;
+    $params['body'] = $body;
+
+    if( $notify_editors ){
+      _cp_notify_send_emails($cruise_editors,$from, $params);
+    }
+    if( $notify_ops ){
+      _cp_notify_send_emails($operators,$from, $params);
+    }
+  }
+}
+
+function _cp_notify_send_emails($users, $from, $params){
+  global $user;
+  
+  foreach($users as $uninformed){
+    //don't notify yourself
+    if( $user->uid != $uninformed->uid ){
+      cp_utils_email($uninformed->mail, $from, $params);
+    }
+  }
+}
+
+/*
+ * returns a DatabaseStatement
+ */
+function cp_notify_get_operators(){
+  $roles = cp_utils_operator_roles();
+  if( !$roles ) return FALSE;
+  
+  $roles = array_keys($roles);
+  $query = db_select('users', 'u');
+  $query->join('users_roles', 'r', 'u.uid = r.uid');
+
+  return $query
+    ->fields('u')
+    ->condition('r.rid', array_keys(cp_utils_operator_roles()), 'IN')
+    ->distinct()
+    ->execute();
+}
+
+function cp_notify_get_cruise_editors($cruise){
+  module_load_include('inc','views_bulk_operations','views_bulk_operations.rules'); 
+  $users = views_bulk_operations_action_load_list("cruise_editors|cruise_editors_vbo", $cruise);
+  if( !empty($users) ){
+    return $users['entity_list'];  //$users[uid] = user;
+  }
+}
+
+function cp_notify_is_notify_editors($edited_node, $cruise, $operation){
+  
+  $notify = TRUE;
+  switch($op){
+    case CP_NOTIFY_ADD:
+      
+      //no need to notify cruise editors of adding a Cruise  (since there are probably none => OG)
+      $notify = !$is_cruise;
+      break;
+      
+    case CP_NOTIFY_EDIT:
+      break;
+    
+    case CP_NOTIFY_DELETE:
+      break;
+    
+    default:
+      break;
+  }
+  
+  return $notify;
+  
+}
+
+function cp_notify_is_notify_operators($edited_node, $cruise, $operation){
+  
+  $notify = TRUE;
+  
+  //only notify if cruise status NOT 'In Progress'
+  if( cp_status_is_in_progress($cruise) ){
+    return FALSE;
+  }
+  
+  switch($operation){
+    case CP_NOTIFY_ADD:
+      
+      //only if its a cruise
+      if( $node->nid != $cruise->nid){
+        $notify = FALSE;
+      }
+      break;
+      
+    case CP_NOTIFY_EDIT:
+      break;
+    
+    case CP_NOTIFY_DELETE:
+      break;
+    
+    default:
+      break;
+  }
+  
+  return $notify;
+}
+
+function cp_notify_get_skip_notification_key($cruise = NULL){
+  return $cruise ? $cruise->nid . ':cruise_notification_skip' : 'cruise_notification_skip';
+}

@@ -1,0 +1,580 @@
+<?php
+
+define('PERMISSION_OPERATOR', 'administer cruise plans');
+define('PERMISSION_ADMINISTER_FIELDS', 'administer cruise fields');
+
+define('CP_ADMIN_ENABLED', 0);
+define('CP_ADMIN_DISABLED', 1);
+define('CP_ADMIN_DELETED', 2);
+
+define('CRUISE_ADMIN_IN_PROGRESS_NS', 'in-progress');
+define('CRUISE_ADMIN_SUBMITTED_NS', 'submitted');
+define('CRUISE_ADMIN_REVIEWED_NS', 'reviewed');
+define('CRUISE_ADMIN_COMPLETED_NS', 'completed');
+
+function cp_admin_permission() {
+  return array(
+    PERMISSION_ADMINISTER_FIELDS => array(
+      'title' => t('Administer Cruise Plan Fields'),
+      'description' => t('Disable/Enable cruise plan fields.'),
+    ),
+    PERMISSION_OPERATOR => array(
+      'title' => t('Is an operator'),
+      'description' => t('Can view all cruises by status'),
+    )
+  );
+}
+
+function cp_admin_menu() {
+  
+  $items['cruises'] = array(
+    'type' => MENU_CALLBACK,
+    'title' => 'Cruises',
+    'page callback' => 'cp_admin_view_all_cruises',
+    'page arguments' => array(CRUISE_ADMIN_COMPLETED_NS),
+    'access callback' => 'cp_admin_can_view_cruises',
+    'access arguments' => array(CRUISE_ADMIN_COMPLETED_NS),
+  );
+  $items['cruises/%'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'cp_admin_view_all_cruises',
+    'page arguments' => array(1),
+    'access callback' => 'cp_admin_can_view_cruises',
+    'access arguments' => array(1),
+  );
+  
+  $items['cp_admin/%/%/%/delete'] = array(
+    'title' => 'Delete Cruise Field',
+    'page callback' => 'cp_admin_delete_field',
+    'page arguments' => array(1, 2, 3),
+    'access callback' => 'cp_admin_can_administer_fields',
+    'access arguments' => array(1, 2, 3),
+    'type' => MENU_CALLBACK
+  );
+  $items['cp_admin/%/%/%/disable'] = array(
+    'title' => 'Disable Cruise Field',
+    'page callback' => 'cp_admin_disable_field',
+    'page arguments' => array(1, 2, 3),
+    'access callback' => 'cp_admin_can_administer_fields',
+    'access arguments' => array(1, 2, 3),
+    'type' => MENU_CALLBACK
+  );
+  $items['cp_admin/%/%/%/enable'] = array(
+    'title' => 'Enable Cruise Field',
+    'page callback' => 'cp_admin_enable_field',
+    'page arguments' => array(1, 2, 3),
+    'access callback' => 'cp_admin_can_administer_fields',
+    'access arguments' => array(1, 2, 3),
+    'type' => MENU_CALLBACK
+  );
+  $items['cp_admin/fields'] = array(
+    'title' => 'Administer Cruise Plan Fields',
+    'page callback' => 'cp_admin_fields',
+    'access callback' => 'user_access',
+    'access arguments' => array(PERMISSION_ADMINISTER_FIELDS),
+    'type' => MENU_CALLBACK
+  );
+  return $items;
+}
+
+function cp_admin_menu_alter(&$items) {
+
+  $items['admin/structure/types/manage/%node_type/fields']['access callback'] = 'cp_admin_fields_access';
+  //$items['admin/structure/types/manage/%node_type/fields']['title callback'] = 'Cruise Plan Fields';
+  $items['admin/structure/types/manage/%node_type/fields']['access arguments'] = array(4);
+  $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu']['access callback'] = 'cp_admin_fields_access';
+  $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu']['access arguments'] = array(4);
+  $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu/edit']['access callback'] = 'cp_admin_fields_access';
+  $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu/edit']['access arguments'] = array(4);
+  $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu/field-settings']['access callback'] = 'cp_admin_fields_access';
+  $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu/field-settings']['access arguments'] = array(4);
+  $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu/widget-type']['access callback'] = 'cp_admin_fields_access';
+  $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu/widget-type']['access arguments'] = array(4);
+  $items['admin/structure/types/manage/%node_type/groups/%field_group_menu/delete']['access callback'] = 'cp_admin_fields_access';
+  $items['admin/structure/types/manage/%node_type/groups/%field_group_menu/delete']['access arguments'] = array(4);
+}
+
+function cp_admin_fields_access($bundle){
+  if( $bundle->type == 'cruise_plan'){
+    return user_access(PERMISSION_ADMINISTER_FIELDS);
+  }
+  
+  return user_access('administer content types');
+}
+function cp_admin_fields(){
+  if(user_access(PERMISSION_ADMINISTER_FIELDS)){
+    drupal_goto('admin/structure/types/manage/cruise-plan/fields');
+  }
+  return;
+}
+
+function cp_admin_is_operator(){
+  return user_access(PERMISSION_OPERATOR);
+}
+
+function cp_admin_can_view_cruises($status_name){
+  $operator_status = array(
+    CRUISE_ADMIN_IN_PROGRESS_NS, CRUISE_ADMIN_SUBMITTED_NS, CRUISE_ADMIN_REVIEWED_NS, 
+    CRUISE_STATUS_IN_PROGRESS, CRUISE_STATUS_SUBMITTED, CRUISE_STATUS_SUBMITTED,
+  );
+  if( in_array($status_name, $operator_status) ){
+    return cp_admin_is_operator();
+  }
+  return TRUE;
+}
+
+
+function cp_admin_view_all_cruises($status_name){
+  global $user;
+    
+  $is_ops = cp_admin_is_operator();
+  if( !$is_ops ){
+    $status_name = CRUISE_STATUS_COMPLETED;
+  }
+    
+  switch($status_name){
+    case CRUISE_ADMIN_IN_PROGRESS_NS: {
+      $status_name = CRUISE_STATUS_IN_PROGRESS;
+      break;
+    }
+    case CRUISE_ADMIN_SUBMITTED_NS: {
+      $status_name = CRUISE_STATUS_SUBMITTED;
+      break;
+    }
+    case CRUISE_ADMIN_REVIEWED_NS: {
+      $status_name = CRUISE_STATUS_REVIEWED;
+      break;
+    }
+    case CRUISE_ADMIN_COMPLETED_NS: {
+      $status_name = CRUISE_STATUS_COMPLETED;
+      break;
+    }
+  }
+  if( $status_name != CRUISE_STATUS_COMPLETED){
+    drupal_set_title('Cruises: '.$status_name);
+  }
+      
+  $view = views_get_view('all_cruises');
+  if( is_object($view) ) {
+    
+    $view->set_arguments( array($status_name) );
+    $machine_name = $status_name == CRUISE_STATUS_COMPLETED ? 'completed' : 'operators';
+    $html = $view->render($machine_name);
+    if( $status_name == CRUISE_STATUS_IN_PROGRESS ){
+      $cruises_without_plans = cp_admin_get_cruises_without_plans();
+      if( !empty($cruises_without_plans) ){
+        $cruises_without_plans = implode('+', array_keys($cruises_without_plans));
+        $cwp = views_get_view('all_cruises');
+        $cwp->set_arguments(array(CRUISE_STATUS_IN_PROGRESS, $cruises_without_plans));
+        $html .= '<h1 class="title">Cruises without Plans</h1>';
+        $html .= $cwp->render('cruises_with_status');
+      }
+    }
+    return $html;
+  }
+  return FALSE;
+}
+
+function cp_admin_get_cruises_without_plans(){
+  $query = db_select('node', 'cruise')->fields('cruise', array('nid'))->condition('type','cruise','='); 
+  $subquery = db_select('og_membership','m')->distinct()->fields('m',array('gid'))->condition('entity_type','node','=');
+  $query->condition('nid', $subquery, 'NOT IN');
+  return $query->execute()->fetchAllAssoc('nid');
+}
+
+function cp_admin_views_pre_render(&$view){
+  $used_nids = array();
+  
+  if ($view->name == 'all_cruises'){
+    if ($view->current_display == 'completed' || $view->current_display == 'operators'){
+      
+      foreach ($view->result as $row){
+        
+        //ensure distinct cruises
+        if (!in_array($row->node_og_membership_nid, $used_nids)){
+          
+          $chief_sci = cp_utils_get_cruise_chief_scientist($row->node_og_membership_nid);
+          $used_nids[] = $row->node_og_membership_nid;
+          if(!empty($chief_sci)){
+            $row->field_field_cruise_party_member_name = $chief_sci['0']->field_field_cruise_party_member_name;
+          }
+          $new_view_result[] = $row;
+        }
+      } 
+      $view->result = $new_view_result;
+    }
+  }
+}
+
+function cp_admin_form_alter(&$form, $form_state, $form_id) {
+  
+  //MANAGE FIELDS
+  if (_cp_admin_valid_form($form_id) && _cp_admin_valid_bundle($form['#bundle']) && _cp_admin_valid_entity_type($form['#entity_type'])) {
+
+    cp_admin_manage_fields($form, $form_state, $form_id);
+    
+  //FIELD DELETE
+  } elseif ($form_id == 'field_ui_field_delete_form' && _cp_admin_valid_bundle($form['bundle']['#value']) && _cp_admin_valid_entity_type($form['entity_type']['#value']) ) {
+
+    //alter the delete field submit function
+    if( !_cp_admin_is_super_user() ){
+      $form['#submit']['0'] = 'cp_admin_delete_field_from_form';
+    }
+   
+  //CRUISE FORM
+  } elseif ($form_id == 'cruise_plan_node_form' ) {
+    /*
+    $devel = drupal_get_path('module', 'devel');
+    drupal_add_css($devel .  '/devel.css');
+    drupal_add_css($devel . '/krumo/skins/orange/skin.css');
+    drupal_add_js($devel . '/krumo/krumo.js');
+    */
+    
+    $disabled_fields = cp_admin_get_disabled_fields($form['#entity_type'],$form['#bundle']);
+    if( !empty($disabled_fields) ){
+      foreach($disabled_fields as $field){
+        $form[$field]['#access'] = FALSE;
+      }
+    }
+  }
+}
+
+function cp_admin_manage_fields(&$form, $form_state, $form_id) {
+  global $user;
+  //dpm($form);
+  drupal_set_title('Cruise Plan Fields');
+  $breadcrumb = array();
+  $breadcrumb[] = l('Home', '<front>');
+  $breadcrumb[] = drupal_get_title();
+  // Set Breadcrumbs
+  drupal_set_breadcrumb($breadcrumb);
+  
+  $form['#prefix'] = 'Please edit the cruise plan fields below<br/><ul>'.
+      '<li>To add a new field:<ol>'.
+      '<li>Find \'Add new field\' below</li>'.
+      '<li>Enter the Question in the field called \'Label\'.</li>'.
+      '<li>Enter a unique identifier in the field called \'Field Name\'.</li>'.
+      '<li>Drag the arrow on the left-hand side of your new field into the preferred position.</li>'.
+      '<li>Click \'Save\' at the bottom.'.
+      '</ol></li></ul><br/>'.
+      '<strong>Fields in red do not get displayed on the form</strong>'
+  ;
+
+  $form['fields']['#header']['6']['colspan'] = 3;
+  
+  drupal_add_css(drupal_get_path('module', 'cp_admin') . '/cp_admin_manage_fields.css');
+  
+  $admin_path = 'cp_admin/' . $form['#entity_type'] . '/' . $form['#bundle'] . '/';
+  $admin_field_path = _field_ui_bundle_admin_path($form['#entity_type'], $form['#bundle']) . '/fields/';
+
+  $sacred_fields = cp_admin_sacred_fields();
+  
+  foreach ($form['fields'] as $field => $f) {
+    
+    $is_sacred = in_array($field, $sacred_fields);
+    
+    if (_cp_admin_valid_field($field)) {
+
+      $field_status = _cp_admin_is_field_disabled($form['#entity_type'], $form['#bundle'], $field);
+
+      if ($field_status == CP_ADMIN_DELETED) {
+
+        //don't display row
+        $form['fields'][$field]['#attributes']['class'][] = 'cp-admin-deleted-field';
+        
+      } 
+      
+      if ($field_status != CP_ADMIN_ENABLED) {
+
+        $form['fields'][$field]['enable'] = array(
+          '#type' => 'link',
+          '#title' => t('enable'),
+          '#href' => $admin_path . $field . '/enable',
+          '#options' => array('attributes' => array('title' => t('Enable instance.'))),
+        );
+        if ($field_status != CP_ADMIN_DELETED) {
+          $form['fields'][$field]['#attributes']['class'][] = 'cp-admin-disabled-field';
+        }
+      } else {
+
+        $form['fields'][$field]['disable'] = array(
+          '#type' => 'link',
+          '#title' => t('disable'),
+          '#href' => $admin_path . $field . '/disable',
+          '#options' => array('attributes' => array('title' => t('Disable instance.'))),
+        );
+      }
+
+      if( !_cp_admin_is_super_user() ){
+        if( !$is_sacred ){
+          $form['fields'][$field]['delete']['#href'] = $admin_path . $field . '/delete';
+          $form['fields'][$field]['edit']['#href'] = $admin_field_path . $field . '/field-settings';
+        } else {
+          //disallow editing of sacred fields
+          $form['fields'][$field]['edit']['#access'] = FALSE;
+          $form['fields'][$field]['delete']['#access'] = FALSE;
+          $form['fields'][$field]['disable']['#access'] = FALSE;
+        }
+      }
+    } else if( !_startsWith($field, '#') ){
+      
+      $form['fields'][$field]['blank_cell'] = array(
+        '#blank_cell' => TRUE,
+      );
+      
+      if( _cp_admin_hide_field($field) ){
+        
+        $form['fields'][$field]['edit']['#access'] = FALSE;
+        $form['fields'][$field]['delete']['#access'] = FALSE;
+        $form['fields'][$field]['widget_type']['#access'] = FALSE;
+        $form['fields'][$field]['type']['#access'] = FALSE;
+        
+        //hide OG fields -> make sure this still saves them
+        $form['fields'][$field]['#attributes']['class'][] = 'cp-admin-hide-field';
+        
+      } else if( $field == 'path' || $field == 'title'){
+        
+        $form['fields'][$field]['edit']['#access'] = FALSE;
+        $form['fields'][$field]['delete']['#access'] = FALSE;
+        $form['fields'][$field]['widget_type']['#access'] = FALSE;
+        $form['fields'][$field]['type']['#access'] = FALSE;
+        $form['fields'][$field]['#attributes']['class'][] = 'cp-admin-hide-field';
+        
+      } else if( $field == '_add_existing_field'){
+        
+        $form['fields'][$field]['#access'] = FALSE;
+        $form['fields'][$field]['#attributes']['class'][] = 'cp-admin-hide-field';
+        
+      } else if( $field == '_add_new_field'){
+        
+        //weed out field types we don't want being used
+        $options = cp_admin_valid_field_type_options();
+        $list = $form['fields'][$field]['type']['#options'];
+        foreach ($list as $type => $data) {
+          if(!in_array($type,$options)) {
+            unset($list[$type]);
+          } else if($type == 'list_boolean'){
+            $list[$type] = 'Yes/No';
+          }
+        }
+        $form['fields'][$field]['type']['#options'] = $list;
+      } else if( $field == '_add_new_group'){
+        //can we hide the group_name box and have it autofill like the field_name?
+      }
+    } else {
+      //dont touch row
+    }
+  }
+  
+  //dpm($form);
+}
+
+function cp_admin_can_administer_fields($entity, $bundle, $field) {
+  if( !in_array($field, cp_admin_sacred_fields()) ){
+    return user_access(PERMISSION_ADMINISTER_FIELDS);
+  }
+  return FALSE;
+}
+
+function cp_admin_delete_field_from_form($form, &$form_state) {
+  $form_values = $form_state['values'];
+  $field = $form_values['field_name'];
+  $bundle = $form_values['bundle'];
+  $entity = $form_values['entity_type'];
+  $cp_field_info = _cp_admin_set_disabled($entity, $bundle, $field, CP_ADMIN_DELETED);
+  
+  $form_state['redirect'] = _cp_admin_redirect_path($entity,$bundle);
+}
+
+function cp_admin_delete_field($entity, $bundle, $field) {
+  $cp_field_info = _cp_admin_set_disabled($entity, $bundle, $field, CP_ADMIN_DELETED);
+  drupal_goto(_cp_admin_redirect_path($entity,$bundle));
+}
+
+function cp_admin_disable_field($entity, $bundle, $field) {
+  $cp_field_info = _cp_admin_set_disabled($entity, $bundle, $field, CP_ADMIN_DISABLED);
+  drupal_goto(_cp_admin_redirect_path($entity,$bundle));
+}
+
+function cp_admin_enable_field($entity, $bundle, $field) {
+  $cp_field_info = _cp_admin_set_disabled($entity, $bundle, $field, CP_ADMIN_ENABLED);
+  drupal_goto(_cp_admin_redirect_path($entity,$bundle));
+}
+
+function cp_admin_get_disabled_fields($entity,$bundle){
+  $instance_ids = db_select('cp_field_info', 'c')
+    ->fields('c', array('field_instance_id'))
+    ->condition('is_disabled', 0, '!=')
+    ->execute()
+    ->fetchAll();
+  
+  if( empty($instance_ids) ) { 
+    return NULL;
+  }
+  
+  $instances = field_info_instances();
+  $bundle_fields = $instances['node'][$bundle];
+  $disabled = array();
+  foreach($bundle_fields as $field_name => $field) {
+    foreach($instance_ids as $disabled_field) {
+      if( $disabled_field->field_instance_id == $field['id'] ) {
+        $disabled[] = $field['field_name'];
+      }
+    }
+  }
+  return $disabled;
+}
+
+/* * ****************
+ * 
+ * HELPER FUNCTIONS
+ * 
+ * ***************** */
+
+function _cp_admin_redirect_path($entity,$bundle){
+  module_load_include('inc', 'field_ui', 'field_ui.admin');
+  $admin_path = _field_ui_bundle_admin_path($entity, $bundle);
+  $path = field_ui_get_destinations(array($admin_path . '/fields'));
+  return $path['0'];
+}
+function _cp_admin_set_disabled($entity, $bundle, $field, $disabled) {
+  global $user;
+
+  if (!isset($disabled)) {
+    drupal_set_message('The status of the field ' . $field . ' has not been set', 'error');
+    return NULL;
+  }
+
+  $instance = field_info_instance($entity, $field, $bundle);
+  if (!isset($instance)) {
+    drupal_set_message('Cannot find the field instance', 'error');
+    return NULL;
+  }
+
+  $cp_field_info = _cp_field_info_for_instance($instance['id']);
+  if (!isset($cp_field_info)) {
+    $cp_field_info = _cp_field_info_new_instance($instance['id']);
+    cp_field_info_save($cp_field_info);    
+  }
+
+  $cp_field_info = _cp_admin_setup_instance(array('is_disabled' => $disabled), (object) $cp_field_info);
+  _cp_admin_save($cp_field_info);
+  return $cp_field_info;
+}
+
+function _cp_admin_save(&$cp_field_info) {
+  if (!empty($cp_field_info->id)) {
+    drupal_write_record('cp_field_info', $cp_field_info, 'id');
+  }
+
+  $num_updates = db_update('cp_field_info')
+    ->fields(array(
+      'is_disabled' => $cp_field_info->is_disabled,
+    ))
+    ->condition('id', $cp_field_info->id, '=')
+    ->execute();
+  return $cp_field_info;
+}
+
+function _cp_admin_is_field_disabled($entity, $bundle, $field) {
+  $instance = field_info_instance($entity, $field, $bundle);
+  if (!isset($instance)) {
+    return CP_ADMIN_ENABLED;
+  }
+
+  $cp_field_info = _cp_field_info_for_instance($instance['id']);
+  return $cp_field_info['is_disabled'];
+}
+
+function _cp_admin_valid_form($form_id) {
+  if (!isset($form_id)) {
+    return false;
+  }
+  return $form_id == 'field_ui_field_overview_form';
+}
+
+function _cp_admin_valid_bundle($bundle) {
+  if (!isset($bundle)) {
+    return false;
+  }
+  return $bundle == 'cruise_plan';
+}
+
+function _cp_admin_valid_entity_type($entity_type) {
+  if (!isset($entity_type)) {
+    return false;
+  }
+  return $entity_type == 'node';
+}
+
+function _cp_admin_valid_field($field_name) {
+  return _startsWith($field_name, 'field_');
+}
+
+function _cp_admin_hide_field($field_name) {
+  return _startsWith($field_name, 'og_');
+}
+
+function _cp_admin_setup_instance($values, $instance = NULL) {
+  if (!isset($instance)) {
+    form_set_error('Could not find the field instance');
+    return NULL;
+  }
+
+  $instance->is_disabled = $values['is_disabled'];
+  return $instance;
+}
+
+function _cp_admin_get_field_info_instance_id($field_instance_id) {
+  if (!isset($field_instance_id)) {
+    return NULL;
+  }
+  return _cp_field_info_get_id_for_instance($field_instance_id['id']);
+}
+
+function _startsWith($haystack, $needle, $index = 0){
+  return substr($haystack, $index, strlen($needle)) === $needle;
+}
+
+function _cp_admin_is_super_user(){
+  global $user;
+  return in_array('administrator', $user->roles);
+}
+
+function cp_admin_sacred_fields(){
+  return array(
+    'field_mob_date',
+    'field_demob_date',
+    'field_departure_date',
+    'field_arrival_date',
+    'field_departure_port',
+    'field_arrival_port',
+    
+    //STRS Import
+    'field_coastal_states',
+    'field_science_days_num',
+    'field_general_ops_area',
+    'field_ancil_facilities',
+    'field_latitude',
+    'field_marsden_grids',
+    'field_navy_op_areas',
+    'field_science_objective',
+  );
+}
+
+function cp_admin_valid_field_type_options(){
+  return array(
+    'list_boolean',
+    'datetime',
+    'date',
+    'number_decimal',
+    'file',
+    'number_float',
+    'geolocation_latlng',
+    'image',
+    'number_integer',
+    'link_field',
+    'text_long',
+    'text',
+  );
+}

@@ -1,0 +1,11 @@
+name = Notification System
+description = "Notifies Cruise Editors & Operators when cruise plans are changed"
+package = "Cruise Planning"
+core = 7.x
+version = "7.x-1.0"
+
+dependencies[] = views_bulk_operations
+dependencies[] = cp_og
+dependencies[] = cp_utils
+
+files[] = cp_notify.module

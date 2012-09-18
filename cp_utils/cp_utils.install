@@ -1,0 +1,6 @@
+<?php
+
+
+function cp_utils_install(){
+  db_query("UPDATE {system} SET weight = 80 WHERE name = 'cp_utils'");
+}

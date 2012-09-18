@@ -1,0 +1,46 @@
+<?php
+
+function cp_field_info_schema(){
+
+  $schema['cp_field_info'] = array(
+
+    'description' => 'The base table for a cruise plan field info',
+    'fields' => array(
+
+      'id' => array(
+        'description' => 'The primary key for the cruise plan field info item.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'field_instance_id' => array(
+        'description' => 'The identifier of the field instance from field_config_instance',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'is_required' => array(
+        'description' => 'Boolean indicating if a value for the field instance is required',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'url' => array(
+        'description' => 'A url pointing to more information about a field',
+        'type' => 'varchar',
+        'length' => 1000,
+      ),
+    ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'field_instance_id' => array('field_instance_id'),
+    ),
+  );
+
+  return $schema;
+}
+
+
+function cp_field_info_install(){
+  db_query("UPDATE {system} SET weight = 70 WHERE name = 'cp_field_info'");
+}

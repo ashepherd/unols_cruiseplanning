@@ -1,0 +1,266 @@
+<?php
+
+function cp_field_info_form_alter(&$form, $form_state, $form_id){
+
+  if( $form_id != 'field_ui_field_settings_form' || $form['#entity_type'] != 'node' || $form['#bundle'] != 'cruise_plan' ){ 
+    return;
+  } 
+
+  switch ($form_id) {
+    case 'field_ui_field_settings_form':
+      $field_name = $form['field']['field_name']['#value'];
+      $checklist = _cp_field_info_for_field_name($form['#bundle'], $field_name);
+
+      $required = 0;
+      $url = '';
+      if( $checklist ){
+        $required = $checklist['is_required'];
+        $url = $checklist['url'];
+      }
+
+      $form['cp_field_info'] = array( 
+       '#type' => 'fieldset',
+       '#title' => 'Cruise Planning Settings',
+       '#description' => '<br/>',
+       '#tree' => TRUE,
+       '#weight' => -100,
+      );
+
+      $form['cp_field_info']['required'] = array(
+        '#type' => 'checkbox',
+        '#title' => themed_translate('<strong>','</strong>','Is this field required for submission?'),
+        '#default_value' => $required,
+      );
+
+      $form['cp_field_info']['url'] = array(
+        '#type' => 'textfield',
+        '#size' => 100,
+        '#maxlength' => 1000,
+        '#title' => themed_translate('<strong>','</strong>','URL'),
+        '#description' => 'The url where users can find more information about this question.',
+        '#default_value' => $url,
+      );
+
+      $form['#submit'][] = 'cp_field_info_field_submit'; // submit, where we can store this settings
+      break;
+  }
+}
+
+function themed_translate($prefix, $suffix, $text) {
+  return $prefix . t($text) . $suffix;
+}
+
+function cp_field_info_field_submit($form, &$form_state){
+
+  //save the form values
+  field_ui_field_settings_form_submit($form, $form_state);
+
+  //find the field instance
+  $instance = field_info_instance($form['#entity_type'], $form['field']['field_name']['#value'], $form['#bundle']);
+  $existing_checklist_id = _cp_field_info_get_id_for_instance($instance['id']);
+  
+  //get our checklist values
+  $required = $form['cp_field_info']['required']['#value'];
+  $url = $form['cp_field_info']['url']['#value'];
+  if ( !empty($url) && !valid_url($url, TRUE)) {
+    $message = "Invalid URL: ".$url;
+    form_set_error('url', $message);
+  }
+  
+  $values = array(
+    'field_instance_id' => $instance['id'],
+    'is_required' => $required,
+    'url' => $url,
+  );
+  
+  $edit = _cp_field_info_setup_instance($values, (object) $form_state['values'], $existing_checklist_id);
+  cp_field_info_save($edit);
+}
+
+
+
+
+/*****************
+* Checklist Entity
+******************/
+
+function cp_field_info_entity_info() {
+  $return = array(
+    'cp_field_info' => array(
+      'label' => t('Cruise Planning Field Info'),
+      'base table' => 'cp_field_info',
+      'entity keys' => array(
+        'id' => 'id',
+      ),
+    ),
+  );
+  return $return;
+}
+
+function cp_field_info_load($checklist_id, $reset = FALSE) {
+  $checklist = cp_field_info_load_multiple(array($checklist_id), $reset);
+  return reset($checklist);
+}
+
+function cp_field_info_load_multiple($checklist_ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('cp_field_info', $checklist_ids, $conditions, $reset);
+}
+
+function cp_field_info_save(&$edit) {
+  field_attach_presave('cp_field_info', $edit);
+  if(!empty($edit->id)) {
+    drupal_write_record('cp_field_info', $edit, 'id');
+    return $edit;
+  }
+  drupal_write_record('cp_field_info', $edit);
+  return $edit;
+}
+
+
+/***************
+* Helper methods
+***************/
+
+function _cp_field_info_for_field_name($bundle, $field_name) {
+  $instance = _cp_field_info_lookup_instance_by_name($bundle, $field_name);
+
+  if( $instance ) {
+    $checklist = _cp_field_info_for_instance($instance['id']);
+    if( $checklist ) {
+      return $checklist;
+    }
+  }
+  return NULL;
+}
+
+function _cp_field_info_get_required_fields_bundles() {
+  static $bundles;
+
+  if( empty($bundles) ) {
+    $bundles = array(
+      'cruise_plan',
+    );
+  }
+  return $bundles;
+} 
+
+function _cp_field_info_get_required_fields() {
+  $instance_ids = db_select('cp_field_info', 'c')
+    ->fields('c', array('field_instance_id'))
+    ->condition('is_required', 1, '=')
+    ->execute()
+    ->fetchAll();
+  if( empty($instance_ids) ) { 
+    return NULL;
+  }
+  $instances = field_info_instances();
+  $instances = $instances['node'];
+  $bundles = _cp_field_info_get_required_fields_bundles();
+  $required = array();
+  foreach($bundles as $bundle) {
+    $bundle_fields = $instances[$bundle];
+    foreach($bundle_fields as $field_name => $field) {
+      foreach($instance_ids as $required_field) {
+        if( $required_field->field_instance_id == $field['id'] ) {
+          $required[$bundle][$field_name] = $required_field->field_instance_id;
+        }
+      }
+    }
+  }
+  return $required;
+}
+
+function _cp_field_info_get_id_for_instance($instance_id) {
+  $cid = db_select('cp_field_info', 'c')
+    ->fields('c', array('id'))
+    ->condition('field_instance_id', $instance_id, '=')
+    ->execute()
+    ->fetchAssoc();
+  if( $cid ){
+    return $cid['id'];
+  }
+  return NULL;
+}
+
+function _cp_field_info_for_instance($instance_id) {
+  $c = db_select('cp_field_info', 'c')
+    ->fields('c' )
+    ->condition('field_instance_id', $instance_id, '=')
+    ->execute()
+    ->fetchAssoc();
+  if( $c ){
+    return $c;
+  }
+  return NULL;
+}
+
+
+function _cp_field_info_lookup_instance($instance_id) {
+  $instances = field_info_instances();
+  $bundles = field_info_bundles();
+
+  foreach($instances as $entity_type => $type_bundle){
+    foreach($type_bundle as $bundle => $bundle_fields){
+      foreach($bundle_fields as $field => $field_instance){
+        if( $field_instance['id'] == $instance_id ){
+          return array(
+            'bundle' => $bundles[$entity_type][$bundle],
+            'field' => $field_instance,
+          );
+        }
+      }
+    }
+  }
+  return NULL;
+}
+
+//not tested
+function _cp_field_info_lookup_instance_by_name($bundle, $field_name){
+  if( !isset($field_name) ) {
+    return NULL;
+  }
+  if( !isset($bundle) ){
+    $bundle = 'cruise_plan';
+  }
+
+  $instances = field_info_instances();
+
+  foreach($instances as $entity_type => $type_bundle){
+    foreach($type_bundle as $bundle_name => $bundle_fields){
+      if( $bundle_name == $bundle ){
+        foreach($bundle_fields as $bundle_field => $field_instance){
+          if( $field_instance['field_name'] == $field_name ){
+             return $field_instance;
+          }
+        }
+      }
+    }
+  }
+  return NULL;
+}
+
+function _cp_field_info_new_instance($field_id){
+  return _cp_field_info_setup_instance(_cp_field_info_generate_default_values($field_id));
+}
+
+function _cp_field_info_setup_instance($values, $instance = NULL, $instance_id = NULL ){
+  //save the checklist settings
+  if( !isset($instance) ){
+    $instance = new stdClass();
+  }
+  if( isset($instance_id) ) {
+    $instance->id = $instance_id;
+  }
+  $instance->field_instance_id = $values['field_instance_id'];
+  $instance->is_required = $values['is_required'];
+  $instance->url = $values['url'];
+  return $instance;
+}
+
+function _cp_field_info_generate_default_values($field_id){
+  return array(
+    'field_instance_id' => $field_id,
+    'is_required' => 0,
+    'url' => NULL,
+  );
+}

@@ -1,0 +1,15 @@
+name = Cruise Planning Administration
+description = "Cruiseplanning Admin"
+package = "Cruise Planning"
+core = 7.x
+version = "7.x-1.0"
+
+dependencies[] = cp_field_info
+dependencies[] = cp_og
+dependencies[] = cp_status
+
+
+files[] = cp_admin.install
+files[] = cp_admin.module
+files[] = cp_admin_forms.css
+files[] = cp_admin_manage_fields.css

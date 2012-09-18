@@ -1,0 +1,28 @@
+.cp-admin-hide-field {
+    display: none;
+}
+
+.cp-admin-deleted-field {
+    /* display: none; */
+    font-style: italic;
+}
+
+.cp-admin-disabled-field {
+    font-style: italic;
+}
+
+.cp-admin-deleted-field.even {
+    background-color: #CC9999;
+}
+
+.cp-admin-deleted-field.odd {
+    background-color: #CC9999;
+}
+
+.cp-admin-disabled-field.even {
+    background-color: #9999CC;
+}
+
+.cp-admin-disabled-field.odd {
+    background-color: #9999CC;
+}

@@ -1,0 +1,12 @@
+name = Utilities
+description = "Utilities"
+package = "Cruise Planning"
+core = 7.x
+version = "7.x-1.0"
+
+files[] = cp_utils.module
+files[] = cp_utils_vertical-tabs.css
+files[] = views/cp_utils.views.inc
+
+dependencies[] = cp_vocabs
+dependencies[] = cp_status

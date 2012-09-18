@@ -1,0 +1,1357 @@
+<?php
+
+/**
+ * Issue with Views Module: Could not select OG permission for a view without this update to views_plugin_display.inc @:
+ * 
+ * 
+  case 'access_options':
+  $access = $this->get_option('access');
+  $plugin = $this->get_plugin('access');
+  $form['#title'] .= t('Access options');
+  if ($plugin) {
++    if(array_key_exists('help topic', $plugin->definition)){
+      $form['#help_topic'] = $plugin->definition['help topic'];
++    }
+
+    $form['#help_module'] = $plugin->definition['module'];
+
+    $form['access_options'] = array(
+      '#tree' => TRUE,
+    );
+    $form['access_options']['type'] = array(
+      '#type' => 'value',
+      '#value' => $access['type'],
+    );
+    $plugin->options_form($form['access_options'], $form_state);
+  }
+  break;
+ * 
+ */
+
+define('OPERATOR_ROLES', 'operator roles');
+
+define('EDIT_CRUISE_PLAN_TITLE','Cruise Plan');
+define('EDIT_CRUISE_INSTRUMENTS_TITLE','Cruise Instruments');
+define('EDIT_CRUISE_TITLE','Cruise Info');
+define('EDIT_CRUISE_TITLE_LONG','Cruise Information');
+
+
+function cp_utils_views_data_alter(&$data){
+  $data['views_entity_node']['delete_node']['field']['handler'] = 'cp_utils_field_node_link_delete_handler';
+  $data['views_entity_node']['edit_node']['field']['handler'] = 'cp_utils_field_node_link_edit_handler';
+}
+
+class cp_utils_field_node_link_delete_handler extends views_handler_field_node_link {
+
+  /**
+   * Renders the link.
+   */
+  function render_link($node, $values) {
+    // Ensure user has access to delete this node.
+    if (!node_access('delete', $node)) {
+      return;
+    }
+    
+    $path = "node/$node->nid";
+    
+    $this->options['alter']['make_link'] = TRUE;
+    $this->options['alter']['path'] = $path."/delete";
+    
+    //$this->options['alter']['query'] = drupal_get_destination();
+    
+    $dest = drupal_get_destination();
+    if( $path != current_path() && strlen($dest['destination']) == 0 ){
+      $dest['destination'] = current_path();
+    }
+    
+    $this->options['alter']['query'] = $dest;
+
+    $text = !empty($this->options['text']) ? $this->options['text'] : t('delete');
+    return $text;
+  }
+}
+
+class cp_utils_field_node_link_edit_handler extends views_handler_field_node_link {
+
+  /**
+   * Renders the link.
+   */
+  function render_link($node, $values) {
+    // Ensure user has access to edit this node.
+    if (!node_access('update', $node)) {
+      return;
+    }
+
+    $this->options['alter']['make_link'] = TRUE;
+    $this->options['alter']['path'] = "node/$node->nid/edit";
+    
+    //$this->options['alter']['query'] = drupal_get_destination();
+    $dest = drupal_get_destination();
+    if( strlen($dest['destination']) == 0 ){
+      $dest['destination'] = current_path();
+    }
+    $this->options['alter']['query'] = $dest;
+
+    $text = !empty($this->options['text']) ? $this->options['text'] : t('edit');
+    return $text;
+  }
+}
+
+
+function cp_utils_menu() {
+  $items['services/cruise/%cruise_id'] = array(
+    'title' => 'Cruise-level metadata',
+    'delivery callback' => 'cp_utils_cruise_metadata_deliver',
+    'type' => MENU_CALLBACK,
+    'description' => t('Provide ISO 19115/-2 XML'),
+    'access callback' => TRUE,
+    'page callback' => 'cp_utils_cruise_metadata',
+    'page arguments' => array(2),
+  );
+  $items['node/%node/cruise-plan'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'title' => EDIT_CRUISE_PLAN_TITLE,
+    'page callback' => 'cp_utils_cruise_plan',
+    'page arguments' => array(1),
+    'weight' => 1,
+    'access callback' => 'cp_utils_cruise_plan_page_access',
+    'access arguments' => array(1),
+  );
+  
+  $items['node/%node/instruments'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'title' => 'Instruments',
+    'description' => t('Select the instruments for this cruise'),
+    'access callback' => 'cp_utils_cruise_plan_page_access',
+    'access arguments' => array(1),
+    'page callback' => 'cp_utils_instruments',
+    'page arguments' => array(1),
+    'weight' => '2',
+  );
+  
+  $items['cp_utils/user/email/autocomplete'] = array(
+    'title' => 'User email autocomplete',
+    'page callback' => 'cp_utils_user_email_autocomplete',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+function cp_utils_menu_alter(&$items) {
+  
+  $items['node/%node/track']['type'] = MENU_CALLBACK;
+  $items['node/%node/devel']['type'] = MENU_CALLBACK;
+  $items['node/%node/clone']['type'] = MENU_CALLBACK;
+  $items['node/%node/clone']['access callback'] = 'cp_utils_clone_access';
+  $items['node/%node/revisions']['type'] = MENU_CALLBACK;
+  
+  $items['node/%node/revisions']['access callback'] = 'cp_utils_revisions_access';
+  $items['node/%node/revisions/list']['access callback'] = 'cp_utils_revisions_access';
+  $items['node/%node/revisions/view']['access callback'] = 'cp_utils_revisions_access';
+  $items['node/%node/revisions/view/latest']['access callback'] = 'cp_utils_revisions_access';
+  $items['node/%node/revisions/%/view']['access callback'] = 'cp_utils_revisions_access';
+  $items['node/%node/revisions/%/revert']['access callback'] = 'cp_utils_revisions_access';
+  $items['node/%node/revisions/%/delete']['access callback'] = 'cp_utils_revisions_access';
+  
+  $items['node/%node/view']['title callback'] = 'cp_utils_view_tab_title';
+  $items['node/%node/view']['title arguments'] = array(1);
+  $items['node/%node/view']['access callback'] = 'cp_utils_cruise_overview_access';
+  $items['node/%node/view']['access arguments'] = array(1,2);
+  $items['node/%node/delete']['access callback'] = 'cp_utils_delete_access';
+  $items['node/%node/delete']['access arguments'] = array(1);
+  
+  $items['node/%node/edit']['title callback'] = 'cp_utils_edit_tab_title';
+  $items['node/%node/edit']['title arguments'] = array(1);
+  $items['node/%node/edit']['weight'] = '-10';
+  
+  //fix the views access callback for these tabs
+  $items['node/%views_arg/funding']['access callback'] = 'cp_utils_cruise_plan_access';
+  $items['node/%views_arg/funding']['access arguments'] = array(1);
+
+  $items['node/%views_arg/members']['access callback'] = 'cp_utils_cruise_plan_access';
+  $items['node/%views_arg/members']['access arguments'] = array(1);
+  
+  $items['node/%views_arg/stations']['access callback'] = 'cp_utils_cruise_plan_access';
+  $items['node/%views_arg/stations']['access arguments'] = array(1);
+}
+
+function cp_utils_clone_access($node){
+  //stop cloning of stations if a cruise is complete
+  if( $node->type == 'cruise_station'){
+    $cruise = cp_utils_get_cruise_for_node($node);
+    if(cp_status_is_completed($cruise)){
+      return FALSE;
+    }
+  }
+  return clone_access_cloning($node);
+}
+
+function cp_utils_url_inbound_alter(&$path, $original_path, $path_language) {
+  if (preg_match('!^cruise/(.+)!', $path, $matches)) {
+    if( $cruise = cruise_id_load($matches[1]) ) {
+      $matches += array(2 => '');
+      $path = 'node/' . $cruise->nid . '/plan';
+    }
+  }
+}
+
+function cruise_id_load($cruiseID) {
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'node')
+      ->entityCondition('bundle', 'cruise')
+      ->fieldCondition('field_cruise_id', 'value', check_plain($cruiseID), '=');
+  $result = $query->execute();
+  if (isset($result['node'])) {
+    $cids = array_keys($result['node']);
+    $cruise = entity_load('node', $cids);
+    return $cruise ? reset($cruise) : FALSE;
+  }
+}
+
+function cp_utils_cruise_overview_access($node, $op = 'view'){
+  global $user;
+  $allowed = node_access($node, $op, $user);
+  if( $node->type != 'cruise' ){
+    return $allowed;
+  }
+  return cp_utils_is_cruise_member($node);
+}
+
+function cp_utils_node_access($node, $op, $account){
+  $allowed = node_access($node, $op, $account);
+  if( $allowed == NODE_ACCESS_DENY ){
+    return NODE_ACCESS_DENY;
+  }
+  
+  $cruise_types = array('cruise','cruise_plan','cruise_instrument', 'funding', 'cruise_station', 'cruise_party_member');
+  
+  if( in_array($node->type, $cruise_types ) ){
+    
+    //use this instead of below: $cruise = cp_utils_get_cruise_for_node($node);
+    if( $node->type != 'cruise'){
+      $cruise = node_load($node->{OG_AUDIENCE_FIELD}['und']['0']['target_id']);
+    } else {
+      $cruise = $node;
+    }
+    
+    $status = cp_status_cruise_status($cruise->nid);    
+    if( $status ){
+      if( $status->name == CRUISE_STATUS_REVIEWED && $op == 'delete' && !cp_utils_is_operator() ){
+        return NODE_ACCESS_DENY;
+      } else if( $status->name == CRUISE_STATUS_COMPLETED ){
+        if( $op == 'delete' ){
+          return NODE_ACCESS_DENY;
+        } else if( $op == 'update' && !cp_utils_is_operator() ){
+          return NODE_ACCESS_DENY;
+        }
+      }
+    }
+  }
+  return NODE_ACCESS_ALLOW;
+}
+
+function cp_utils_delete_access($node, $op = 'delete'){
+  global $user;
+  if( $node->type == 'milestone' && cp_utils_is_operator() ){
+    return TRUE;
+  }
+  
+  $access = node_access($node, $op, $user);
+  if( $access == NODE_ACCESS_DENY ){
+    return FALSE;
+  }
+
+  if( in_array($node->type, cp_utils_get_cruise_node_types() ) ){
+    $cruise = cp_utils_get_cruise_for_node($node);
+    if(cp_status_is_completed($cruise)){
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+function cp_utils_cruise_plan_page_access($node){
+  global $user;
+  if( $node->type == 'cruise' && cp_utils_cruise_plan_access($node) ){
+    $access = cp_utils_node_access($node, 'update', $user);
+    if( $access != NODE_ACCESS_DENY ){
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+function cp_utils_cruise_plan_access($cruise){
+  if( is_numeric($cruise) ){
+    $cruise = node_load($cruise);
+  }
+  return cp_utils_is_cruise_member($cruise) && !cp_status_is_completed($cruise);
+}
+
+function cp_utils_is_super_user(){
+  global $user;
+  return $user->uid == 1;
+}
+function cp_utils_is_operator(){
+  global $user;
+  
+  if( cp_utils_is_super_user() ){
+    return TRUE;
+  }
+  
+  $ops_roles = cp_utils_operator_roles();
+  foreach($user->roles as $key => $role){
+    if( in_array($role, $ops_roles) ){
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+function cp_utils_is_cruise_member($cruise){
+  $cruise = !is_numeric($cruise) ? $cruise->nid : $cruise;
+  return cp_utils_is_super_user() || cp_utils_is_operator() || og_is_member('node', $cruise );
+}
+
+function cp_utils_is_cruise_admin($cruise){
+  global $user;
+  if( cp_utils_is_super_user() || cp_utils_is_operator() ) return true;
+  if( is_numeric($cruise) ){
+    $cruise = node_load($cruise);
+  }
+  return og_user_access_entity('administer group', 'node', $cruise, $user);
+}
+
+function cp_utils_revisions_access($node){
+  global $user;
+  //return variable_get('enable_revisions_page_'. $node->type, TRUE) || user_access('administer nodes') || og_user_access_entity('update any cruise_plan content', 'node', $node, $user);
+  return cp_utils_is_super_user();
+}
+
+
+
+function cp_utils_clone_preprocess($cruise, $cruise_item){
+  $cruise_item->{OG_AUDIENCE_FIELD}['und'][0]['target_id'] = $cruise->nid;
+}
+
+/*
+ * pre-save of a cloned cruise item
+ */
+function cp_utils_clone_process($cloned_item){
+  
+  if( $cloned_item->type == 'cruise_plan'){
+    unset($cloned_item->field_departure_date['und']);
+    unset($cloned_item->field_arrival_date['und']);
+    unset($cloned_item->field_mob_date['und']);
+    unset($cloned_item->field_demob_date['und']);
+  }
+}
+
+
+function _cp_utils_remove_form_buttons(&$form){
+  unset($form['actions']['preview']);
+  unset($form['actions']['delete']);
+  unset($form['actions']['preview_changes']);
+}
+
+function cp_utils_form_cruise_node_form_alter(&$form, $form_state, $form_id){
+  $path = current_path();
+  $is_cloning = strstr($path, '/clone');
+  
+  if(!cp_utils_is_operator()){
+    $form['field_cruise_id']['#access'] = FALSE;
+  }
+  
+  if( $is_cloning ){
+    
+    $form['field_cruise_id']['und']['0']['value']['#default_value'] = '';
+    $form['field_unols_schedule_id']['und']['0']['value']['#default_value'] = '';
+    
+  } else {
+    drupal_set_title(EDIT_CRUISE_TITLE_LONG);
+    _cp_utils_remove_form_buttons($form);
+  }
+}
+
+function cp_utils_form_cruise_plan_node_form_alter(&$form, $form_state, $form_id){
+  drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
+  _cp_utils_remove_form_buttons($form);
+  $form['actions']['submit']['#submit'][] = 'cp_utils_cruise_plan_submit';
+  $form['#after_build'][] = 'cp_utils_port_select';
+  $form['#attached']['css'] = array(drupal_get_path('module', 'cp_utils') . '/cp_utils_vertical-tabs.css');
+  
+  $form['actions']['submit']['#validate'][] = 'cp_utils_cruise_plan_validate';
+}
+
+function cp_utils_form_cruise_instrument_node_form_alter(&$form, $form_state, $form_id){
+  drupal_set_title(EDIT_CRUISE_INSTRUMENTS_TITLE);
+  _cp_utils_remove_form_buttons($form);
+  $form['actions']['submit']['#submit'][] = 'cp_utils_cruise_instrument_submit';  
+}
+
+function cp_utils_views_query_alter(&$view, &$query){
+  //necessary for the term_reference_tree to work at the cruise_instruments form
+  if( $view->name == 'ship_instruments' && !empty($view->args) ){
+    if( $view->editing ){
+      //works on views, but not in form
+      $query->field_aliases['taxonomy_term_data_field_data_field_instruments']['tid'] = 'tid';
+    } else {
+      //works in form, but not in views
+      $query->fields['taxonomy_term_data_field_data_field_instruments_tid']['alias'] = 'tid';
+    }
+  }
+}
+
+function cp_utils_form_funding_node_form_alter(&$form, $form_state, $form_id){
+  //drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
+  _cp_utils_remove_form_buttons($form);
+}
+
+function cp_utils_form_cruise_party_member_node_form_alter(&$form, $form_state, $form_id){
+  //drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
+  _cp_utils_remove_form_buttons($form);
+}
+
+function cp_utils_form_cruise_station_node_form_alter(&$form, $form_state, $form_id){
+  //drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
+  _cp_utils_remove_form_buttons($form);
+}
+
+/*
+ * Hide fields that don't need to be edited
+ */
+function cp_utils_form_alter(&$form, &$form_state, $form_id) {
+ 
+  $valid_form = ($form_id == 'user_profile_form' || 
+                (array_key_exists('type', $form) && in_array($form['type']['#value'], cp_utils_get_cruise_content_types()) ) )
+                && 
+                array_key_exists(OG_AUDIENCE_FIELD, $form);
+  
+  if( $valid_form ){
+    $form[OG_AUDIENCE_FIELD]['#access'] = FALSE;
+    dpm($form);
+  }
+  
+}
+
+function cp_utils_cruise_plan_validate($form, &$form_state){
+  //check if dates are valid
+  $mob = $form_state['values']['field_mob_date']['und']['0']['value'];
+  $demob = $form_state['values']['field_demob_date']['und']['0']['value'];
+  $dep = $form_state['values']['field_departure_date']['und']['0']['value'];
+  $arr = $form_state['values']['field_arrival_date']['und']['0']['value'];
+  $last_date = $demob ? $demob : ($arr ? $arr : ($dep ? $dep : $mob));
+
+  if( $arr ){ 
+    if( $arr > $last_date ){
+      form_set_error('field_demob_date', 'The demobilization date should be on or after the arrival date');
+    }
+    $last_date = $arr;
+  }
+  if( $dep ){ 
+    if( $dep > $last_date ){
+      form_set_error('field_arrival_date', 'The arrival date must come after the departure date');
+    }
+    $last_date = $dep;
+  }
+  if( $mob && $mob > $last_date ){
+    if( $last_date == $arr ){
+      form_set_error('field_mob_date', 'The mobilization date should be before the arrival date');
+    } else {
+      form_set_error('field_departure_date', 'The departure date should be on or after the mobilization date');
+    }
+  }
+}
+
+function cp_utils_cruise_plan_submit($form, &$form_state){
+    
+  $cruise = $form_state['values'][OG_AUDIENCE_FIELD]['und']['0']['target_id'];
+  if( empty($cruise) ){
+    $cruise = cp_utils_get_cruise_for_node($form_state['node']);
+  }
+  if( !empty($cruise) ){
+    
+    $path = 'node/'.$cruise;
+    if(cp_status_is_in_progress($cruise)){
+      $path .= '/cruise-plan';
+      $menu = cp_utils_local_tasks($path);    
+      $tab = cp_utils_next_tab($menu);
+      if( $tab ){
+        $form_state['redirect'] = $tab['#link']['href'];
+      }
+    } else {
+      //send to the Cruise Overview
+      $form_state['redirect'] = $path;
+    }
+  } else {
+    $form_state['redirect'] = '';
+  }
+}
+
+function cp_utils_cruise_instrument_submit($form, &$form_state){
+    
+  $cruise = $form_state['values'][OG_AUDIENCE_FIELD]['und']['0']['target_id'];
+  if( empty($cruise) ){
+    $cruise = cp_utils_get_cruise_for_node($form_state['node']);
+  }
+  if( !empty($cruise) ){
+    
+    $path = 'node/'.$cruise;
+    if(cp_status_is_in_progress($cruise)){
+      $path .= '/instruments';
+      $menu = cp_utils_local_tasks($path);    
+      $tab = cp_utils_next_tab($menu);
+      if( $tab ){
+        $form_state['redirect'] = $tab['#link']['href'];
+      }
+    } else {
+      //send to the Cruise Overview
+      $form_state['redirect'] = $path;
+    }
+  } else {
+    $form_state['redirect'] = '';
+  }
+}
+
+function cp_utils_cruise_edit_redirect($cruise){
+  $menu = cp_utils_local_tasks('node/'.$cruise->nid.'/edit');    
+  $tab = cp_utils_next_tab($menu);
+  if( $tab ){
+    drupal_goto($tab['#link']['href']);
+  }
+}
+
+function cp_utils_operator_roles(){
+  if ($roles = cache_get(OPERATOR_ROLES, 'cache')) {
+    return $roles->data;
+  } else {
+    $system_roles = array('administrator', 'authenticated user', 'anonymous user');
+    $roles = user_roles();
+    foreach($roles as $key => $role){
+      if(in_array($role, $system_roles)){
+        unset($roles[$key]);
+      }
+    }
+    cache_set(OPERATOR_ROLES, $roles, 'cache');
+    return $roles;
+  }
+}
+
+/*
+ * 
+ */
+function cp_utils_prepare_cruise_for_cloning($cruise){
+  cp_status_set_cruise_status($cruise);
+}
+
+function cp_utils_port_select($form, &$form_state) {
+
+  $dropdown_array = cp_utils_ports_dropdown();
+  
+  $form['field_departure_port']['und']['#options'] = $dropdown_array;
+  $form['field_arrival_port']['und']['#options'] = $dropdown_array;
+  
+  return $form;
+}
+
+function cp_utils_ports_dropdown(){
+  $dropdown_source = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_PORTS)->vid,0,NULL,TRUE);
+  $dropdown_array = array('0' => '--none--');
+  foreach ($dropdown_source as $item) {
+    $name = $item->name;
+    if( $item->field_country ){
+      $country = taxonomy_term_load($item->field_country['und']['0']['target_id']);
+      $name .= ', ' . $country->name;
+    }
+    $key = $item->tid;
+    $value = $name;
+    $dropdown_array[$key] = $value;
+  }
+  return $dropdown_array;
+}
+
+
+
+function cp_utils_cruise_plan($cruise){
+  $path ='node/add/cruise-plan';
+  
+  $plan = _cp_utils_get_cruise_plan($cruise->nid);
+  if( $plan ){
+    $path = 'node/' .$plan. '/edit';
+  }
+  drupal_goto($path, array('query' => array(OG_AUDIENCE_FIELD => $cruise->nid)));
+}
+
+function cp_utils_instruments($cruise){
+  $path ='node/add/cruise-instrument';
+  
+  $plan = _cp_utils_get_instruments($cruise->nid);
+  if( $plan ){
+    $path = 'node/' .$plan. '/edit';
+  }
+  drupal_goto($path, array('query' => array(OG_AUDIENCE_FIELD => $cruise->nid)));
+}
+
+
+function cp_utils_view_tab_title($node){
+  if ($node->type == 'cruise') {
+    return t('Overview');
+  }
+  else {
+    // Returning a value is necessary.  It does not default to the non-callback
+    // title, but instead presents a blank value.
+    return t('View');
+  }
+}
+
+function cp_utils_edit_tab_title($node){
+  if ($node->type == 'cruise') {
+    return t(EDIT_CRUISE_TITLE);
+  }
+  else {
+    // Returning a value is necessary.  It does not default to the non-callback
+    // title, but instead presents a blank value.
+    return t('Edit');
+  }
+}
+
+function cp_utils_next_section_form($form, &$form_state,$menu, $button_name = ''){
+  $tab = cp_utils_next_tab($menu);
+  if( $tab ){
+    if( strlen($button_name) == 0 ){
+      $button_name = $tab['#link']['title'];
+      if( strlen($button_name) == 0 ){
+        $button_name = 'Next';
+      }
+    }
+    $form['#action'] = '/'. $tab['#link']['href'];
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t($button_name) . ' =>',
+    );
+    $form['#prefix'] = '<div><p>';
+    $form['#suffix'] = '</p></div>';
+  }
+  return $form;
+}
+
+function cp_utils_next_tab($menu){
+  
+  $found = FALSE;
+  $tabs = $menu['tabs']['output'];
+  foreach($tabs as $tab){
+    if( $found ){
+      return $tab;
+    }
+    if( array_key_exists('#active', $tab) && $tab['#active'] == TRUE ){
+      $found = TRUE;
+    }
+  }
+  return FALSE;
+}
+
+function cp_utils_get_cruise_for_node($node){
+  if( is_numeric($node)){
+    $node = node_load($node);
+  }
+  
+  if( $node->type == 'cruise' ){
+    return $node->nid;
+  }
+  if( !empty($node->{OG_AUDIENCE_FIELD}['und']['0']['target_id']) ){
+    return $node->{OG_AUDIENCE_FIELD}['und']['0']['target_id'];
+  }
+  
+  $og = og_get_entity_groups('node', $node);
+  if( !empty($og) ){
+    return array_shift($og['node']);
+  }
+  
+  return cp_utils_find_group_from_request();
+}
+
+function cp_utils_find_group_from_request(){
+  $group = FALSE;
+  if( !empty($_GET) ){
+    $group = $_GET[OG_AUDIENCE_FIELD];
+  }
+  if( !$group && !empty($_SESSION) && array_key_exists('og_context',$_SESSION) && array_key_exists('gid',$_SESSION['og_context']) ){
+    $group = $_SESSION['og_context']['gid'];
+  }
+  return $group;
+}
+
+function cp_utils_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  
+  //if editing a cruise plan, change the tabs menu
+  $paths = cp_utils_menu_paths();
+  $content_types = cp_utils_get_cruise_content_types();
+  if( $root_path == 'node/%/edit' || $root_path == 'node/%/delete' ||in_array($root_path, $paths) ){
+    $node = $root_path == 'node/%/delete' ? $router_item['page_arguments']['1'] : $router_item['page_arguments']['0'];
+    $is_node = is_object($node);
+    $type = $is_node ? $node->type : $node;
+    if( in_array($type, $content_types) ){
+
+      $cruiseID = $is_node ? $node->{OG_AUDIENCE_FIELD}['und']['0']['target_id'] : cp_utils_find_group_from_request();
+      $path = 'node/'.$cruiseID;
+      
+      //only send to next step if cruise plan in progress
+      //if( cp_status_is_in_progress($cruiseID) ){
+
+        $type_path = $type;
+        if( $type == 'cruise_plan' ){
+          $type_path = 'cruise-plan';
+        } else if( $type == 'cruise_party_member' ){
+          $type_path = 'members';
+        } else if( $type == 'cruise_station'){
+          $type_path = 'stations';
+        } else if( $type == 'cruise_instrument'){
+          $type_path = 'instruments';
+        }
+
+        $path .= '/'. $type_path;        
+      //}
+      
+      dpm($path);
+      $menu = cp_utils_local_tasks($path);
+      $data['tabs']['0'] = $menu['tabs'];
+      $data['actions'] = $menu['actions'];
+    }
+  }
+}
+
+function cp_utils_menu_paths(){
+  $paths = variable_get('cp_utils_menu_paths');
+  if( empty($paths) ){
+    $paths = array(
+      'node/add/cruise-plan',
+      'node/add/cruise-instrument',
+      'node/add/funding',
+      'node/add/cruise-party-member',
+      'node/add/cruise-station',
+    );
+  }
+  return $paths;
+}
+
+function cp_utils_local_tasks($path, $level = 0) {
+  $data = &drupal_static(__FUNCTION__);
+  $root_path = &drupal_static(__FUNCTION__ . ':root_path', '');
+  $empty = array(
+    'tabs' => array(
+      'count' => 0,
+      'output' => array(),
+    ), 
+    'actions' => array(
+      'count' => 0,
+      'output' => array(),
+    ), 
+    'root_path' => &$root_path,
+  );
+
+  if (!isset($data)) {
+    $data = array();
+    // Set defaults in case there are no actions or tabs.
+    $actions = $empty['actions'];
+    $tabs = array();
+
+    $router_item = menu_get_item($path);
+
+    // If we failed to fetch a router item or the current user doesn't have
+    // access to it, don't bother computing the tabs.
+    if (!$router_item || !$router_item['access']) {
+      return $empty;
+    }
+
+    // Get all tabs (also known as local tasks) and the root page.
+    $result = db_select('menu_router', NULL, array('fetch' => PDO::FETCH_ASSOC))
+      ->fields('menu_router')
+      ->condition('tab_root', $router_item['tab_root'])
+      ->condition('context', MENU_CONTEXT_INLINE, '<>')
+      ->orderBy('weight')
+      ->orderBy('title')
+      ->execute();
+    $map = $router_item['original_map'];
+    $children = array();
+    $tasks = array();
+    $root_path = $router_item['path'];
+
+    foreach ($result as $item) {
+      _menu_translate($item, $map, TRUE);
+      if ($item['tab_parent']) {
+        // All tabs, but not the root page.
+        $children[$item['tab_parent']][$item['path']] = $item;
+      }
+      // Store the translated item for later use.
+      $tasks[$item['path']] = $item;
+    }
+
+    // Find all tabs below the current path.
+    $path = $router_item['path'];
+    // Tab parenting may skip levels, so the number of parts in the path may not
+    // equal the depth. Thus we use the $depth counter (offset by 1000 for ksort).
+    $depth = 1001;
+    $actions['count'] = 0;
+    $actions['output'] = array();
+    while (isset($children[$path])) {
+      $tabs_current = array();
+      $actions_current = array();
+      $next_path = '';
+      $tab_count = 0;
+      $action_count = 0;
+      foreach ($children[$path] as $item) {
+        // Local tasks can be normal items too, so bitmask with
+        // MENU_IS_LOCAL_TASK before checking.
+        if (!($item['type'] & MENU_IS_LOCAL_TASK)) {
+          // This item is not a tab, skip it.
+          continue;
+        }
+        if ($item['access']) {
+          $link = $item;
+          // The default task is always active. As tabs can be normal items
+          // too, so bitmask with MENU_LINKS_TO_PARENT before checking.
+          if (($item['type'] & MENU_LINKS_TO_PARENT) == MENU_LINKS_TO_PARENT) {
+            // Find the first parent which is not a default local task or action.
+            for ($p = $item['tab_parent']; ($tasks[$p]['type'] & MENU_LINKS_TO_PARENT) == MENU_LINKS_TO_PARENT; $p = $tasks[$p]['tab_parent']) {
+            }
+            // Use the path of the parent instead.
+            $link['href'] = $tasks[$p]['href'];
+            // Mark the link as active, if the current path happens to be the
+            // path of the default local task itself (i.e., instead of its
+            // tab_parent_href or tab_root_href). Normally, links for default
+            // local tasks link to their parent, but the path of default local
+            // tasks can still be accessed directly, in which case this link
+            // would not be marked as active, since l() only compares the href
+            // with $_GET['q'].
+            if ($link['href'] != $_GET['q']) {
+              $link['localized_options']['attributes']['class'][] = 'active';
+            }
+            $tabs_current[] = array(
+              '#theme' => 'menu_local_task', 
+              '#link' => $link, 
+              '#active' => TRUE,
+            );
+            $next_path = $item['path'];
+            $tab_count++;
+          }
+          else {
+            // Actions can be normal items too, so bitmask with
+            // MENU_IS_LOCAL_ACTION before checking.
+            if (($item['type'] & MENU_IS_LOCAL_ACTION) == MENU_IS_LOCAL_ACTION) {
+              // The item is an action, display it as such.
+              $actions_current[] = array(
+                '#theme' => 'menu_local_action', 
+                '#link' => $link,
+              );
+              $action_count++;
+            }
+            else {
+              // Otherwise, it's a normal tab.
+              $tabs_current[] = array(
+                '#theme' => 'menu_local_task', 
+                '#link' => $link,
+              );
+              $tab_count++;
+            }
+          }
+        }
+      }
+      $path = $next_path;
+      $tabs[$depth]['count'] = $tab_count;
+      $tabs[$depth]['output'] = $tabs_current;
+      $actions['count'] += $action_count;
+      $actions['output'] = array_merge($actions['output'], $actions_current);
+      $depth++;
+    }
+    $data['actions'] = $actions;
+    // Find all tabs at the same level or above the current one.
+    $parent = $router_item['tab_parent'];
+    $path = $router_item['path'];
+    $current = $router_item;
+    $depth = 1000;
+    while (isset($children[$parent])) {
+      $tabs_current = array();
+      $next_path = '';
+      $next_parent = '';
+      $count = 0;
+      foreach ($children[$parent] as $item) {
+        // Skip local actions.
+        if ($item['type'] & MENU_IS_LOCAL_ACTION) {
+          continue;
+        }
+        if ($item['access']) {
+          $count++;
+          $link = $item;
+          // Local tasks can be normal items too, so bitmask with
+          // MENU_LINKS_TO_PARENT before checking.
+          if (($item['type'] & MENU_LINKS_TO_PARENT) == MENU_LINKS_TO_PARENT) {
+            // Find the first parent which is not a default local task.
+            for ($p = $item['tab_parent']; ($tasks[$p]['type'] & MENU_LINKS_TO_PARENT) == MENU_LINKS_TO_PARENT; $p = $tasks[$p]['tab_parent']) {
+            }
+            // Use the path of the parent instead.
+            $link['href'] = $tasks[$p]['href'];
+            if ($item['path'] == $router_item['path']) {
+              $root_path = $tasks[$p]['path'];
+            }
+          }
+          // We check for the active tab.
+          if ($item['path'] == $path) {
+            // Mark the link as active, if the current path is a (second-level)
+            // local task of a default local task. Since this default local task
+            // links to its parent, l() will not mark it as active, as it only
+            // compares the link's href to $_GET['q'].
+            if ($link['href'] != $_GET['q']) {
+              $link['localized_options']['attributes']['class'][] = 'active';
+            }
+            $tabs_current[] = array(
+              '#theme' => 'menu_local_task', 
+              '#link' => $link, 
+              '#active' => TRUE,
+            );
+            $next_path = $item['tab_parent'];
+            if (isset($tasks[$next_path])) {
+              $next_parent = $tasks[$next_path]['tab_parent'];
+            }
+          }
+          else {
+            $tabs_current[] = array(
+              '#theme' => 'menu_local_task', 
+              '#link' => $link,
+            );
+          }
+        }
+      }
+      $path = $next_path;
+      $parent = $next_parent;
+      $tabs[$depth]['count'] = $count;
+      $tabs[$depth]['output'] = $tabs_current;
+      $depth--;
+    }
+    // Sort by depth.
+    ksort($tabs);
+    // Remove the depth, we are interested only in their relative placement.
+    $tabs = array_values($tabs);
+    $data['tabs'] = $tabs;
+
+    // Allow modules to alter local tasks or dynamically append further tasks.
+    drupal_alter('menu_local_tasks', $data, $router_item, $root_path);
+  }
+
+  if (isset($data['tabs'][$level])) {
+    return array(
+      'tabs' => $data['tabs'][$level], 
+      'actions' => $data['actions'], 
+      'root_path' => $root_path,
+    );
+  }
+  // @todo If there are no tabs, then there still can be actions; for example,
+//   when added via hook_menu_local_tasks_alter().
+  elseif (!empty($data['actions']['output'])) {
+    return array('actions' => $data['actions']) + $empty;
+  }
+  return $empty;
+}
+
+function cp_utils_ship_by_unols_id($unols_id){
+  
+  $query = new EntityFieldQuery();
+
+  $query->entityCondition('entity_type', 'taxonomy_term')
+    ->entityCondition('bundle', 'ships')
+    ->fieldCondition('field_unols_id', 'value', $unols_id)
+    ->addMetaData('account', user_load(1)); // Run the query as user 1.
+  $result = $query->execute();
+  foreach($result as $ship){
+    return $ship;
+  }
+  return FALSE;
+}
+
+function cp_utils_port_by_unols_id($unols_id){
+  
+  $query = new EntityFieldQuery();
+
+  $query->entityCondition('entity_type', 'taxonomy_term')
+    ->entityCondition('bundle', 'ports')
+    ->fieldCondition('field_unols_id', 'value', $unols_id)
+    ->addMetaData('account', user_load(1)); // Run the query as user 1.
+  $result = $query->execute();
+  foreach($result as $port){
+    return $port;
+  }
+  return FALSE;
+}
+
+function cp_utils_cruise_metadata($cruise) {
+  $build = array(
+    '#cruise' => $cruise,
+  );
+  return $build;
+}
+
+function cp_utils_get_chief_scientists_by_cruise_status($status){
+  $view = views_get_view('all_cruises');
+  if(is_object($view)){
+    if( $status ){
+      $term = key($term);
+      $view->execute_display('chief_scientists',array($status, TERM_CHIEF_SCI));
+      return $view->result;
+    }
+  }
+  return $false;
+}
+
+function cp_utils_get_cruise_chief_scientist($cruise){
+  $view = views_get_view('cruise_chief_scientist');
+  if(is_object($view)){
+    $term = taxonomy_get_term_by_name(TERM_CHIEF_SCI, TAXONOMY_CRUISE_PARTY_ROLES);
+    if( $term ){
+      $term = key($term);
+      $view->set_arguments(array($cruise, $term));
+      $view->init_display();
+      $view->pre_execute();
+      $view->execute();
+      return $view->result;
+    }
+  }
+  return $false;
+}
+
+
+
+function _cp_utils_get_cruise_content($cruise_nid, $sub_view = '') {
+  $view = views_get_view('cruise_content');
+  if (is_object($view)) {
+    $view->set_arguments(array($cruise_nid));
+    $view->init_display();
+    $view->pre_execute();
+    $view->execute();
+    return $view->result;
+  }
+  return FALSE;
+}
+
+function _cp_utils_get_cruise_plan($cruise_nid) {  
+  $view = views_get_view('cruise_plan');
+  if (is_object($view)) {
+    $view->set_arguments(array($cruise_nid));
+    $view->init_display();
+    $view->pre_execute();
+    $view->execute();
+    $plan = $view->result;
+
+    if( !empty($plan) ){
+      return $plan['0']->nid;
+    }
+  }  
+  return FALSE;
+}
+
+function _cp_utils_get_ship($cruise){
+  $view = views_get_view('cruise_ship');
+  if (is_object($view)) {
+    $view->set_arguments(array($cruise));
+    $view->init_display();
+    $view->pre_execute();
+    $view->execute();
+    $ship = $view->result;
+    //dpm($ship);
+    return $ship;
+  }  
+  return FALSE;
+}
+
+function _cp_utils_get_ship_instruments($cruise){
+  $view = views_get_view('ship_instruments');
+  if (is_object($view)) {
+    $view->set_arguments(array($cruise));
+    $view->init_display();
+    $view->pre_execute();
+    $view->execute();
+    return $view->result;
+  }  
+  return FALSE;
+}
+
+function _cp_utils_get_instruments($cruise_nid) {  
+  $view = views_get_view('cruise_instruments');
+  if (is_object($view)) {
+    $view->set_arguments(array($cruise_nid));
+    $view->init_display();
+    $view->pre_execute();
+    $view->execute();
+    $plan = $view->result;
+
+    if( !empty($plan) ){
+      return $plan['0']->nid;
+    }
+  }  
+  return FALSE;
+}
+
+function _cp_utils_print_array($arr, $lvl = 0){
+  $indent = '-';
+  for($a = 0; $a < $lvl; $a++){ $indent .= '-';}  
+  
+  foreach($arr as $p => $v){
+    if(is_array($v)){
+      print $indent . $p . " => \n";
+      print _cp_utils_print_array($v, $lvl+1);
+    } else {
+      print $indent . $p . " = " . $v . "\n";
+    }
+  }
+}
+
+function cp_utils_user_email_autocomplete($string = '') {
+  $matches = array();
+  if ($string) {
+    $result = db_select('users')
+      ->fields('users', array('mail'))
+      ->condition('mail', db_like($string) . '%', 'LIKE')
+      ->range(0, 10)
+      ->execute();
+    
+    foreach ($result as $user) {
+      $matches[$user->mail] = check_plain($user->mail);
+    }
+  }
+
+  drupal_json_output($matches);
+}
+
+function cp_utils_email($to, $from, $params = array()){
+  $type = !empty($params) && array_key_exists('type', $params) ? $params['type'] : 'email';
+  $result = drupal_mail('cp_utils', $type, $to, language_default(), $params, $from, TRUE);
+}
+
+function cp_utils_mail($key, &$message, $params) {
+  switch ($key) {
+    case 'email':
+      $message['subject'] = t($params['subject']);
+      $message['body'][] = $params['body'];
+      break; 
+  }
+}
+
+/*
+ * Convenience function to use in case global URL changes need to be made
+ */
+function cp_utils_get_url($path = NULL,$options = array()){
+  $options['absolute'] = TRUE;
+  return url($path,$options);
+}
+
+/*
+ * returns whether or not there can be more than one of the types for a Cruise Plan.
+ */
+function cp_utils_is_multiple_node_type($type){
+  $singular_types = array('cruise','cruise_plan');
+  return !in_array($type, $singular_types);
+}
+
+function cp_utils_get_site_name(){
+  return variable_get('site_name', "Cruise Planning");
+}
+
+function cp_utils_get_user_name($account = NULL){
+  global $user;
+  if( empty($account) ){
+    $account = $user;
+  }
+  $account = user_load($account->uid);
+  
+  if( empty($account->field_user_name) || empty($account->field_user_name['und']['0']['value']) ){
+    return $account->name;
+  }
+
+  return $account->field_user_name['und']['0']['value'];
+}
+
+function cp_utils_get_cruise_info($cruise){
+  if(is_numeric($cruise)){
+    $cruise = node_load($cruise);
+  }
+    
+  //Ship
+  $info = 'Cruise: '.$cruise->title."\n";
+  if( !empty($cruise->field_ship) ){
+    $ship = taxonomy_term_load($cruise->field_ship['und']['0']['target_id']);
+    if( !empty($ship) ){
+      $info.= 'Ship: '.$ship->name."\n";
+    }
+  }
+  //Website
+  if( !empty($cruise->field_cruise_website) && !empty($cruise->field_cruise_website['und']['0']['url']) ){
+    $info .= 'Website: '.$cruise->field_cruise_website['und']['0']['url']."\n";
+  }
+  //UNOLS
+  if( !empty($cruise->field_unols_schedule_id) && !empty($cruise->field_unols_schedule_id['und']['0']['value']) ){
+    $info .= 'UNOLS Schedule ID: '.$cruise->field_unols_schedule_id['und']['0']['value']."\n";
+  }
+  
+  $cruise_plan = _cp_utils_get_cruise_plan($cruise->nid);
+  if( !empty($cruise_plan) ){
+    $cruise_plan = node_load($cruise_plan);
+    
+    //Departure
+    if( !empty($cruise_plan->field_departure_date) && !empty($cruise_plan->field_departure_date['und']['0']['value']) ){
+      $info .= 'Departure Date: '. cp_utils_get_date($cruise_plan->field_departure_date['und']['0']['value'])."\n";
+    }
+    if( !empty($cruise_plan->field_departure_port) ){
+      $port = taxonomy_term_load($cruise_plan->field_departure_port['und']['0']['target_id']);
+      if( !empty($port) ){
+        $info.= 'Departure Port: '.$port->name."\n";
+      }
+    }
+    
+    //Arrival
+    if( !empty($cruise_plan->field_arrival_date) && !empty($cruise_plan->field_arrival_date['und']['0']['value']) ){
+      $info .= 'Arrival Date: '. cp_utils_get_date($cruise_plan->field_arrival_date['und']['0']['value'])."\n";
+    }
+    if( !empty($cruise_plan->field_arrival_port) ){
+      $port = taxonomy_term_load($cruise_plan->field_arrival_port['und']['0']['target_id']);
+      if( !empty($port) ){
+        $info.= 'Departure Port: '.$port->name."\n";
+      }
+    }
+  }
+  
+  return $info;
+}
+
+function cp_utils_get_departure_date($cruise){
+  if(is_numeric($cruise)){
+    $cruise = node_load($cruise);
+  }
+  $cruise_plan = _cp_utils_get_cruise_plan($cruise->nid);
+  if( !empty($cruise_plan) ){
+    $cruise_plan = node_load($cruise_plan);
+    if( !empty($cruise_plan->field_departure_date) && !empty($cruise_plan->field_departure_date['und']['0']['value']) ){
+      return $cruise_plan->field_departure_date['und']['0']['value'];
+    }
+  }
+  return FALSE;
+}
+
+function cp_utils_get_date($date, $format = 'F j, Y'){
+  return format_date($date,'medium',$format);
+}
+
+function cp_utils_get_cruise_content_types(){
+  $og_types = cp_utils_get_cruise_node_types();
+  $key = array_search('cruise', $og_types);
+  if( !empty($key) ){
+    unset($og_types[$key]);
+  }
+  return $og_types;
+}
+function cp_utils_get_cruise_node_types(){
+  $og_group_content = og_entity_property_info();
+  return array_keys( $og_group_content['node']['bundles'] );
+}
+
+function cp_utils_get_node_view($node_view){
+  $html = '<div>';
+  switch($node_view['#bundle']){
+    case 'funding':{
+      $html .= '<strong>'.$node_view['field_funding_agency']['0']['#title'].'</strong><br/>';
+      if( !empty($node_view['field_award_number']) ){
+        $html .= $node_view['field_award_number']['#title'].': '.$node_view['field_award_number']['0']['#markup'].'<br/>';
+      }
+      if( !empty($node_view['field_inst_project_number']) ){
+        $html .= $node_view['field_inst_project_number']['#title'].': '.$node_view['field_inst_project_number']['0']['#markup'].'<br/>';
+      }
+      if( !empty($node_view['field_funding_description']) ){
+        $html .= $node_view['field_funding_description']['#title'].': '.$node_view['field_inst_project_number']['0']['#markup'].'<br/>';
+      }
+      break;
+    }
+    case 'cruise_party_member':{
+      $html .= '<strong>'.$node_view['field_cruise_party_member_name']['0']['#markup'].'</strong><br/>';
+      if( !empty($node_view['field_cruise_party_member_role']) ){
+        $html .= $node_view['field_cruise_party_member_role']['#title'];
+        $roles = array_keys($node_view['field_cruise_party_member_role']['#items']);
+        $count = count($roles);
+        if( $count > 1 ){
+          $html .= '(s)';
+        }
+        $html .= ': ';
+        $counter = 1;
+        foreach($roles as $index){
+          $html .= $node_view['field_cruise_party_member_role'][$index]['#markup'];
+          if( $counter < $count ) $html .= ', ';
+          $counter++;
+        }
+        $html .= '<br/>';
+      }
+      if( !empty($node_view['field_organization']) ){
+        $html .= $node_view['field_organization']['#title'].': '.$node_view['field_organization']['0']['#title'].'<br/>';
+      }
+      break;
+    }
+    case 'cruise_station':{
+      $html .= '<strong>'.$node_view['#node']->title.'</strong><br/>';
+      if( !empty($node_view['field_latitude']) ){
+        $html .= $node_view['field_latitude']['#title'];
+        $roles = array_keys($node_view['field_latitude']['#items']);
+        $count = count($roles);
+        if( $count > 1 ){
+          $html .= '(s)';
+        }
+        $html .= ': ';
+        $counter = 1;
+        foreach($roles as $index){
+          $html .= str_replace('Geolocation is','',strip_tags($node_view['field_latitude'][$index]['#markup']));
+          if( $counter < $count ) $html .= ' ; ';
+          $counter++;
+        }
+        $html .= '<br/>';
+      }
+      if( !empty($node_view['field_station_distance']) ){
+        $html .= $node_view['field_station_distance']['#title'].': '.$node_view['field_station_distance']['0']['#markup'].'<br/>';
+      }
+      if( !empty($node_view['field_station_time']) ){
+        $html .= $node_view['field_station_time']['#title'].': '.$node_view['field_station_time']['0']['#markup'].'<br/>';
+      }
+      break;
+    }
+  }
+  $html .= '</div>';
+  return $html;
+}
+
+function cp_utils_get_node_title($node_view){
+  $title = '';
+  switch($node_view['#bundle']){
+    case 'funding':{
+      $title .= $node_view['field_funding_agency']['0']['#title'];
+      break;
+    }
+    case 'cruise_party_member':{
+      $title .= $node_view['field_cruise_party_member_name']['0']['#markup'];
+      break;
+    }
+    case 'cruise_station':{
+      $title .= $node_view['#node']->title;
+      break;
+    }
+  }
+  return check_plain($title);
+}
+
+function cp_utils_form_node_delete_confirm_alter(&$form, &$form_state, $form_id){
+  $cruise_types = array('funding', 'cruise_station', 'cruise_party_member');
+
+  $node = $form['#node'];
+  
+  if( in_array($node->type, $cruise_types) ){
+    $html = $form['#prefix'];
+    if( empty($html) ){
+      $html = '';
+    }
+    $node_view = node_view($node);
+    drupal_set_title('Are you sure you want to delete <em class="placeholder">'.cp_utils_get_node_title($node_view).'</em> from this cruise?', PASS_THROUGH);
+    $form['#prefix'] = $html . cp_utils_get_node_view($node_view);
+  }
+}

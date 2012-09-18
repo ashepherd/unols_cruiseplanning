@@ -1,0 +1,13 @@
+/* bartik theme */
+.vertical-tabs legend { display: block; }
+.vertical-tabs-panes {
+  display: hidden;
+  padding: 15px;
+}
+
+/* seven theme */
+div.vertical-tabs .vertical-tabs-panes legend {
+  display: block;
+  padding: 5px;
+  padding-top: 10px;
+}

@@ -1,0 +1,10 @@
+name = UNOLS Ship Time Request Import
+description = "Import a STRS Request into a Cruise Plan"
+package = "Cruise Planning"
+core = 7.x
+version = "7.x-1.0"
+
+dependencies[] = cp_og
+dependencies[] = cp_vocabs
+
+files[] = cp_strs.module

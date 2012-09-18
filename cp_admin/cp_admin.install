@@ -1,0 +1,32 @@
+<?php
+
+define('CP_ADMIN_TABLE', 'cp_field_info');
+define('CP_ADMIN_DISABLED_FIELD', 'is_disabled');
+
+function cp_admin_schema(){
+  if (db_table_exists(CP_ADMIN_TABLE)) {
+    if( !db_field_exists(CP_ADMIN_TABLE, CP_ADMIN_DISABLED_FIELD) ){
+      $spec = array(
+        'description' => 'Value indicating if the field is disabled from use',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      );
+      db_add_field( CP_ADMIN_TABLE, CP_ADMIN_DISABLED_FIELD, $spec);
+    }
+  }
+  
+  
+}
+
+function cp_admin_install(){
+  db_query("UPDATE {system} SET weight = 75 WHERE name = 'cp_admin'");
+}
+
+function cp_admin_uninstall(){
+  if( db_table_exists(CP_ADMIN_TABLE)) {
+    if( db_field_exists(CP_ADMIN_TABLE, CP_ADMIN_DISABLED_FIELD) ){
+      db_drop_field( CP_ADMIN_TABLE, CP_ADMIN_DISABLED_FIELD);
+    }
+  }
+}

@@ -1,0 +1,68 @@
+<?php
+
+function cp_invite_schema(){
+
+  $schema['cp_invite'] = array(
+
+    'description' => 'The base table for external cruise plan invitations',
+    'fields' => array(
+
+      'id' => array(
+        'description' => 'The primary key for the invitation item.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'email' => array(
+        'description' => 'The email address of the invitee',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'user' => array(
+        'description' => 'The uid of the invitee after registration',
+        'type' => 'int',
+        'size' => 'normal',
+      ),
+      'cruise' => array(
+        'description' => 'The cruise the invitee has been invited to edit',
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,        
+      ),
+      'role' => array(
+        'description' => 'The OG role(s) the invitee will have when accepted as a cruise editor',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,        
+      ),
+      'invited_by' => array(
+        'description' => 'The uid of the inviter',
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,        
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the invite was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'access_key' => array(
+        'description' => 'The access key that links a user registration to an invitiation',
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+    ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'email' => array('email'),
+      'cruise' => array('cruise'),
+      'invited_by' => array('invited_by'),
+      'access_key' => array('access_key'),
+    ),
+  );
+
+  return $schema;
+}
+

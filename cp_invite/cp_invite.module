@@ -1,0 +1,525 @@
+<?php
+
+define('CP_INVITE_DELIMITER', ',');
+
+define('CP_INVITE_INVITER_NAME','inviter_name');
+define('CP_INVITE_INVITER_USER_NAME','inviter_username');
+define('CP_INVITE_USER_NAME','user_name');
+define('CP_INVITE_USER_USER_NAME','user_username');
+define('CP_INVITE_ROLE_NAME','role_name');
+
+define('CP_INVITE_HEADER_EMAIL','Email Address');
+define('CP_INVITE_HEADER_ACCEPTED','Accepted?');
+define('CP_INVITE_HEADER_INVITER','Inviter');
+define('CP_INVITE_HEADER_DATE','Date Invited');
+
+//needs form to show, delete w/ tableselect
+
+function cp_invite_menu(){
+  $items['node/%node/invitations'] = array(
+    'title callback' => 'cp_invite_title_page',
+    'title arguments' => array(1),
+    'type' => MENU_CALLBACK,
+    'page callback' => 'cp_invite_page',
+    'page arguments' => array(1),
+    'access callback' => 'cp_utils_is_cruise_admin',
+    'access arguments' => array(1),
+  );
+  $items['node/%node/invitations/%cp_invite/resend'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'cp_invite_action',
+    'page arguments' => array(1,3,4),
+    'access callback' => 'cp_invite_action_permission',
+    'access arguments' => array(1,3,4),
+  );
+  $items['register/%cp_invite_key'] = array(
+    'type' => MENU_CALLBACK,
+    'page callback' => 'cp_invite_register_form',
+    'page arguments' => array(1),
+    'access callback' => 'cp_invite_register_access',
+    'access arguments' => array(1),
+  );
+  return $items;
+}
+
+function cp_invite_key_load($key){
+  
+  $invite = db_select('cp_invite','i')
+    ->fields('i')
+    ->condition('i.access_key',$key,'=')
+    ->execute()
+    ->fetch();
+  return $invite;
+}
+
+function cp_invite_register_access($invite){
+  return !empty($invite);
+}
+
+function cp_invite_register_form($invite){
+  $form_state = array();
+  $form_state['cp_invite'] = $invite;
+  $form = drupal_get_form('user_register_form',$form_state);
+  return $form;
+}
+
+function cp_invite_form_user_register_form_alter(&$form, &$form_state){
+  
+  if( !empty($form_state['build_info']['args']['0']) ){
+    $invite = $form_state['build_info']['args']['0']['cp_invite'];
+    $form['account']['mail']['#default_value'] = $invite->email;
+  }
+}
+
+function cp_invite_action_permission($cruise, $invite, $action){
+  return cp_utils_is_cruise_admin($cruise);
+}
+
+function cp_invite_title_page($cruise = NULL){
+  if( empty($cruise) ){
+    return 'Cruise Plan Invitiations';
+  }
+  
+  return $cruise->title . ': Invitations';
+}
+
+function cp_invite_action($cruise, $invite, $action){
+  
+  if( is_array($invite) ){
+    $invite = array_shift($invite);
+  }
+  
+  switch($action ){
+    case 'resend':
+      cp_invite_resend_invitation($invite, $cruise);
+      break;
+    default:
+      break;
+  }
+}
+
+function cp_invite_page($cruise){
+  return drupal_get_form('cp_invite_page_form', $cruise);
+}
+
+function cp_invite_page_form($form, &$form_state, $cruise){
+  global $user;
+  
+  $options = NULL;
+  if( isset($_REQUEST['sort']) ){
+    $field = _cp_invite_get_field($_REQUEST['order']);
+    if( $field ){
+      $options = array(
+        'sort' => array(
+          'field' => $field,
+          'direction' => $_REQUEST['sort'],
+        ),
+      );
+    }
+  }
+  
+  $invites = cp_invite_get_cruise_invitations($cruise, NULL, $options);
+  
+  $total = 0;
+  $rows = array();
+  $disabled = array();
+  
+  $only_delete_owned_invites = TRUE; //FALSE; 
+  
+  foreach($invites as $invite){
+    $total += 1;
+
+    $accepted = !empty($invite->user);
+    
+    $i_roles = $invite->{CP_INVITE_ROLE_NAME};
+    if( empty($i_roles) && !empty($invite->roles)){
+      $first_role = TRUE;
+      $i_og_roles = cp_og_role_load(explode(CP_INVITE_DELIMITER,$invite->roles));
+      foreach($i_og_roles as $ior){
+        $i_roles .= $first_role ? '' : ', ';
+        $i_roles .= $ior->name;
+        $first_role = FALSE;
+      }
+    }
+   
+    $inviter_name = empty($invite->{CP_INVITE_INVITER_NAME}) ? $invite->{CP_INVITE_INVITER_USER_NAME} : $invite->{CP_INVITE_INVITER_NAME}.' ('.$invite->{CP_INVITE_INVITER_USER_NAME}.')';
+    $account_name = empty($invite->{CP_INVITE_USER_NAME}) ? $invite->{CP_INVITE_USER_USER_NAME} : $invite->{CP_INVITE_USER_NAME}.' ('.$invite->{CP_INVITE_USER_USER_NAME}.')';
+
+    $rows[$invite->id] = array(
+        //email
+        'email' => array('data' => l( $invite->email, 'mailto:'.t($invite->mail) ), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+        //roles
+        'roles' => array('data' => $i_roles, 'nowrap' => 'nowrap', 'valign' => 'top'), 
+        //accepted
+        'accepted' => array('data' => t($accepted ? 'User: '.$account_name : 'No'), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+        //inviter
+        'inviter' => array('data' => t($inviter_name), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+        //date
+        'date' => array('data' => cp_utils_get_date($invite->created), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+        //ops
+        'ops' => array('data' => '['. l(t('resend'),'node/'.$cruise->nid.'/invitations/'.$invite->id.'/resend') . ']', 'nowrap' => 'nowrap', 'valign' => 'top'), 
+    );
+    
+    if( $only_delete_owned_invites ){
+      //allow if the invitation has already been accepted
+      if( !$accepted && $user->uid != $invite->invited_by){
+        $disabled[] = $invite->id;
+      }
+    }
+  }
+  
+  $form['invites'] = array(
+    '#type' => 'tableselect',
+    '#header' => _cp_invite_page_headers(),
+    '#options' => $rows,
+    '#empty' => t('No invitations'),
+    '#multiple' => TRUE,
+    '#prefix' => t('['.l(t('New Invitiation'),'node/'.$cruise->nid.'/editors', 
+        array('query' => array( 'destination' => 'node/'.$cruise->nid.'/invitations') ) ).']'),
+    '#attributes' => array('valign' => 'top', 'nowrap' => 'nowrap'),
+  );
+
+  $form['cruise'] = array(
+    '#type' => 'hidden',
+    '#value' => $cruise->nid,
+  );
+
+  if (!empty($disabled)) {
+    foreach ($disabled as $iid) {
+      $form['invites'][$iid]['#disabled'] = TRUE;
+    }
+  }
+  
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Delete Invitations',
+    '#validate' => array('cp_invite_page_validate'),
+    '#submit' => array('cp_invite_page_submit'),
+    '#attributes' => array('onclick' => "if(confirm('Are you sure you want to delete the selected invitiations?')) return true; return false;"),
+  );
+  
+  $form['actions']['cancel'] = array(
+    '#markup' => l(t('Back to the Cruise'), 'node/'.$cruise->nid),
+  );
+  
+  return $form;
+}
+
+function cp_invite_page_validate($form, &$form_state){
+  global $user;
+
+  //should an admin be able to delete invitations it didn't send?
+  
+  //clear out all the zeros
+  $invites = array_diff(array_values($form_state['values']['invites']), array(0));
+  if(!empty($invites)){
+    $invites = cp_invite_load($invites);
+    if( empty($invites) ){
+      form_set_error('invite','Select at least one invitation to delete');
+    } else {
+      foreach($invites as $invite){
+        $accepted = !empty($invite->user);
+        if(!$accepted && $user->uid != $invite->invited_by){
+          form_set_error('invite','You are not allowed to delete one of the selected invitations');
+          break;
+        }
+      }
+    }
+  } else {
+    form_set_error('invite','Select at least one invitation to delete');
+  }
+}
+
+function cp_invite_page_submit($form, &$form_state){
+  $invites = array_diff(array_values($form_state['values']['invites']), array(0));
+  foreach($invites as $iid){
+    cp_invite_delete($iid);
+  }
+  drupal_set_message('Deleted the selected invitations.');
+}
+
+function _cp_invite_page_headers(){
+  $header = array(
+    'email' => array(
+      'data' => t(CP_INVITE_HEADER_EMAIL),
+      'field' => 'email',
+      'nowrap' => 'nowrap',
+    ),
+    'roles' => array(
+      'data' => t('Role(s)'),
+      'nowrap' => 'nowrap',
+    ),
+    'accepted' => array(
+      'data' => t(CP_INVITE_HEADER_ACCEPTED),
+      'field' => 'accepted',
+      'nowrap' => 'nowrap',
+    ),
+    'inviter' => array(
+      'data' => t(CP_INVITE_HEADER_INVITER),
+      'field' => 'inviter',
+      'nowrap' => 'nowrap',
+    ),
+    'date' => array(
+      'data' => t(CP_INVITE_HEADER_DATE),
+      'field' => 'date',
+      'sort' => 'desc',
+      'nowrap' => 'nowrap',
+    ),
+    'ops' => array(
+      'data' => 'Resend Invitiation?',
+      'nowrap' => 'nowrap',
+    ),
+  );
+  
+  return $header;
+}
+
+function cp_invite_get_inviter_invitations($inviter, $cruise = NULL, array $options = NULL){
+  return cp_invite_get_invitations(NULL, $cruise, $inviter);
+}
+
+function cp_invite_get_cruise_invitations($cruise, $inviter = NULL, array $options = NULL){
+  return cp_invite_get_invitations(NULL, $cruise, $inviter, $options);
+}
+
+function cp_invite_get_invitations($email, $cruise = NULL, $inviter = NULL, array $options = NULL){
+  if(!empty($cruise) && !is_numeric($cruise) ){
+    $cruise = $cruise->nid;
+  }
+  if(!empty($inviter) && !is_numeric($inviter) ){
+    $inviter = $inviter->uid;
+  }
+  $invites = cp_invite_search($email, $cruise, $inviter, $options);
+  return $invites;
+}
+
+function cp_invite_external_user($to, $from, $params){
+  global $user;
+  
+  if( empty($params) || !array_key_exists('cruise', $params) || !array_key_exists('data', $params) || !array_key_exists('roles', $params['data']) || empty($params['data']['roles']) ){
+    drupal_set_message('Could not send the invitation to '.t($to).' because of insufficient information.', 'error');
+    return FALSE;
+  }
+  
+  $cruise = node_load($params['cruise']);
+  if( empty($cruise) ){
+    drupal_set_message('Could not send the invitation to '.t($to).' because of missing cruise information.', 'error');
+    return FALSE;
+  }
+  
+  $roles = $params['data']['roles'];
+  if( is_array($roles) ){
+    //serialize to string for storage
+    $roles = implode(CP_INVITE_DELIMITER, $roles);
+  }
+  
+  $invited = cp_invite_search($to, $cruise->nid);
+  if( !empty($invited) ) { 
+    drupal_set_message(t($to).' has already been invited.', 'error');
+    return FALSE;
+  }
+  
+  $invite = new stdClass();
+  $invite->created = time();
+  $invite->invited_by = $user->uid;
+  $invite->email = t($to);
+  $invite->cruise = $cruise->nid;
+  $invite->role = $roles;
+  $invite->access_key = _cp_invite_get_access_key($invite);
+  cp_invite_save($invite);
+  
+  $params['cp_invite'] = $invite;
+  
+  $result = drupal_mail('cp_invite', 'invite', $to, language_default(), $params, $from, TRUE);
+  
+  if($result && $result['result'] ){
+
+    drupal_set_message('An invitation has been sent to: <strong>'.t($to). '</strong>. They will be able to edit this cruise plan after registering.');
+  } else {
+    drupal_set_message('Unable to send email invitation to: <strong>'.t($to).'</strong>', 'error');
+  }
+}
+
+/*
+ * Implement hook_mail()
+ */
+function cp_invite_mail($key, &$message, $params) {
+  
+  $invite = $params['cp_invite'];
+  $cruise = $params['cp_og']['cruise'];
+  $roles = $params['data']['roles'];
+  $inviter = $params['inviter'];
+  
+  switch ($key) {
+    case 'invite':
+      // note: data can be passed to this function in the $params array
+      $message['subject'] = t('['.cp_utils_get_site_name(). '] You have been invited to edit the cruise plan: ' . $cruise->title);
+      $message['body'][] = t(cp_utils_get_user_name($inviter) ." has invited you to edit this cruise.\n\n".cp_utils_get_cruise_info($cruise). "\n\nTo begin work on this cruise plan, register here : " . cp_utils_get_url('register/'.$invite->access_key) );
+      break; 
+  }
+}
+
+function cp_invite_resend_invitation($invite, $cruise = NULL){
+  if( is_numeric($invite) ){
+    $invite = cp_invite_load($invite);
+  }
+  
+  $from = user_load($invite->invited_by);
+  $params = array(
+    'data' => array(
+      'roles' => $invite->role,
+    ),
+    'cp_og' => array(
+      'cruise' => node_load($invite->cruise),
+    ),
+    'cp_invite' => $invite,
+  );
+  $result = drupal_mail('cp_invite', 'invite', $invite->email, language_default(), $params, $from->mail, TRUE);
+  if($result && $result['result'] ){
+    drupal_set_message('An invitation has been resent to: <strong>'.t($invite->email). '</strong>. They will be able to edit this cruise plan after registering.');
+  } else {
+    drupal_set_message('Unable to resend email invitation to: <strong>'.t($invite->email).'</strong>', 'error');
+  }
+  
+  drupal_goto('node/'. ((!empty($invite)) ? $invite->cruise : $cruise) .'/invitations');
+}
+
+/**
+ * Implement hook_user_insert()
+ *
+ */
+function cp_invite_user_insert(&$edit, $account, $category) {
+  
+  $invites = cp_invite_get_invitations($account->init);
+  foreach($invites as $invite){
+    $membership = cp_og_update_user_cruise_roles($account, $invite->cruise, explode(CP_INVITE_DELIMITER, $invite->role) );
+    $invite->user = $account->uid;
+    $invite->access_key = NULL;
+    cp_invite_save($invite);
+  }
+}
+
+/**
+ * Implement hook_user_delete()
+ *
+ */
+function cp_invite_user_delete($account) {
+  cp_invite_delete_invitations($account);
+}
+
+function cp_invite_delete_invitations($account){
+  $invites = cp_invite_get_invitations($account->init);
+  foreach($invites as $invite){
+    cp_invite_delete($invite->id);
+  }
+}
+
+function _cp_invite_get_access_key($invite){
+  return base64_encode(strval($invite->created).CP_INVITE_DELIMITER.$invite->email);
+}
+
+function _cp_invite_get_field($field){
+  switch($field){
+    case CP_INVITE_HEADER_EMAIL:
+      return 'i.email';
+      break;
+    case CP_INVITE_HEADER_ACCEPTED:
+      return CP_INVITE_USER_USER_NAME;
+      break;
+    case CP_INVITE_HEADER_INVITER:
+      return CP_INVITE_INVITER_USER_NAME;
+      break;
+    case CP_INVITE_HEADER_DATE:
+      return 'i.created';
+      break;
+  }
+  
+  return FALSE;
+}
+
+function cp_invite_search($email = NULL, $cruise = NULL, $inviter = NULL, array $options = NULL){
+  
+  $invites = db_select('cp_invite', 'i')->fields('i');
+  
+  if( !empty($email)){
+    $invites->condition('email', $email, '=');
+  }
+  if( !empty($cruise) ){
+    $invites->condition('cruise', $cruise, '=');
+  }
+  if( !empty($inviter) ){
+    $invites->condition('invited_by', $inviter, '=');
+  }
+  
+  $inviter_name_alias = $invites->leftJoin('field_data_field_user_name','u',"%alias.entity_id = i.invited_by and %alias.entity_type = 'user' and %alias.bundle = 'user'");
+  $invites->addField($inviter_name_alias, 'field_user_name_value', CP_INVITE_INVITER_NAME);
+
+  $inviter_alias = $invites->leftJoin('users','u',"%alias.uid = i.invited_by");
+  $invites->addField($inviter_alias, 'name', CP_INVITE_INVITER_USER_NAME);
+
+  $account_name_alias = $invites->leftJoin('field_data_field_user_name','a',"%alias.entity_id = i.user and %alias.entity_type = 'user' and %alias.bundle = 'user'");
+  $invites->addField($account_name_alias, 'field_user_name_value', CP_INVITE_USER_NAME);
+
+  $account_alias = $invites->leftJoin('users','u',"%alias.uid = i.user");
+  $invites->addField($account_alias, 'name', CP_INVITE_USER_USER_NAME);
+
+  $role_alias = $invites->leftJoin('og_role','r',"%alias.rid = i.role");
+  $invites->addField($role_alias, 'name', CP_INVITE_ROLE_NAME);
+  
+  $use_original_sort = TRUE;
+  if(!empty($options) ){
+    if( !empty($options['sort']) ){
+      $sort = $options['sort'];
+      $invites->orderBy($sort['field'], $sort['direction']);
+      
+      $use_original_sort = $sort['field'] != 'i.created';
+    }
+  } 
+  if($use_original_sort){
+    $invites->orderBy('i.created', 'DESC');
+  }
+
+  return $invites->execute()->fetchAll();
+}
+
+
+/*****************
+* Invite Entity
+******************/
+
+function cp_invite_entity_info() {
+  $return = array(
+    'cp_invite' => array(
+      'label' => t('Cruise Planning Invitations'),
+      'base table' => 'cp_invite',
+      'entity keys' => array(
+        'id' => 'id',
+      ),
+    ),
+  );
+  return $return;
+}
+
+function cp_invite_save(&$edit) {
+  field_attach_presave('cp_invite', $edit);
+  if(!empty($edit->id)) {
+    drupal_write_record('cp_invite', $edit, 'id');
+    return $edit;
+  }
+  drupal_write_record('cp_invite', $edit);
+  return $edit;
+}
+
+function cp_invite_delete($invite_id) {
+  db_delete('cp_invite')
+    ->condition('id', $invite_id)
+    ->execute();
+}
+
+function cp_invite_load($invite_id, $reset = FALSE) {
+  return cp_invite_load_multiple(array($invite_id), array(), $reset);
+}
+
+function cp_invite_load_multiple($invite_ids = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('cp_invite', $invite_ids, $conditions, $reset);
+}

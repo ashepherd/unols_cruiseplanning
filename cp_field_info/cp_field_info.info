@@ -1,0 +1,10 @@
+name =  Cruise Field Info
+description = "Extra information about Cruise Plan fields"
+package = "Cruise Planning"
+core = 7.x
+version = "7.x-1.0"
+
+dependencies[] = entity
+
+files[] = cp_field_info.install
+files[] = cp_field_info.module

@@ -1,0 +1,61 @@
+<?php
+
+function cp_checklist_schema(){
+
+  $schema['cp_checklist'] = array(
+
+    'description' => 'The base table for external cruise plan checklist',
+    'fields' => array(
+      'id' => array(
+        'description' => 'The primary key for the checklist item.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'milestone' => array(
+        'description' => 'The milestone node id related to the checklist',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'cruise' => array(
+        'description' => 'The cruise node id related to the checklist',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'status' => array(
+        'description' => 'Indicates the milestone status.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'uid' => array(
+        'description' => 'The {users}.uid that owns this node; initially, this is the user that created it.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the invite was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the node was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'cruise' => array('cruise'),
+      'status' => array('cruise','milestone','status'),
+    ),
+  );
+
+  return $schema;
+}
+

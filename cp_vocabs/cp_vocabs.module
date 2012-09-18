@@ -1,0 +1,1457 @@
+<?php
+
+/*
+ * TAXONOMIES
+ */
+define('TAXONOMY_ORG', 'organization');
+define('TAXONOMY_PORTS', 'ports');
+define('TAXONOMY_COUNTRIES', 'countries');
+define('TAXONOMY_SHIPS', 'ships');
+define('TAXONOMY_FUNDING_AGENCIES', 'funding_agencies');
+define('TAXONOMY_CRUISE_STATUS', 'cruise_status');
+define('TAXONOMY_CRUISE_PARTY_ROLES', 'cruise_party_roles');
+/*
+ * TAXONOMY TERMS
+ */
+define('TERM_CHIEF_SCI', 'Chief Scientist');
+define('TERM_PI', 'Principal Investigator');
+/*
+ * EXTERNAL TAXONOMY RESOURCES
+ */
+//PORTS
+define('PORTS_URL', 'http://strs.unols.org/services/ports.svc/json/GetAllPorts');
+define('R2R_PORT_URL', 'http://linked.rvdata.us/resource/port/');
+define('R2R_PORT_SPARQL', 'http://linked.rvdata.us/sparql?query=PREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2003%2F01%2Fgeo%2Fwgs84_pos%23%3E%0D%0APREFIX+foaf%3A+%3Chttp%3A%2F%2Fxmlns.com%2Ffoaf%2F0.1%2F%3E%0D%0APREFIX+r2r%3A+%3Chttp%3A%2F%2Flinked.rvdata.us%2Fvocab%2Fresource%2Fclass%2F%3E%0D%0APREFIX+vcard%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2Fvcard-rdf%2F3.0%23%3E%0D%0APREFIX+dcterms%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0D%0APREFIX+gn%3A+%3Chttp%3A%2F%2Fwww.geonames.org%2Fontology%23%3E%0D%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0D%0APREFIX+r2rterms%3A+%3Chttp%3A%2F%2Fvoc.rvdata.us%2F%3E%0D%0APREFIX+map%3A+%3Cfile%3Amap-r2r.n3%23%3E%0D%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0D%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0D%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0D%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0D%0ASELECT+DISTINCT+%3Finstance%0D%0AWHERE+%7B+%3Finstance+a+%3Chttp%3A%2F%2Flinked.rvdata.us%2Fvocab%2Fresource%2Fclass%2FPort%3E+%7D%0D%0AORDER+BY+%3Finstance&output=json');
+//define('R2R_PORT_SPARQL', 'http://linked.rvdata.us/sparql?query=PREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2003%2F01%2Fgeo%2Fwgs84_pos%23%3E%0D%0APREFIX+foaf%3A+%3Chttp%3A%2F%2Fxmlns.com%2Ffoaf%2F0.1%2F%3E%0D%0APREFIX+r2r%3A+%3Chttp%3A%2F%2Flinked.rvdata.us%2Fvocab%2Fresource%2Fclass%2F%3E%0D%0APREFIX+vcard%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2Fvcard-rdf%2F3.0%23%3E%0D%0APREFIX+dcterms%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0D%0APREFIX+gn%3A+%3Chttp%3A%2F%2Fwww.geonames.org%2Fontology%23%3E%0D%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0D%0APREFIX+r2rterms%3A+%3Chttp%3A%2F%2Fvoc.rvdata.us%2F%3E%0D%0APREFIX+map%3A+%3Cfile%3Amap-r2r.n3%23%3E%0D%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0D%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0D%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0D%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0D%0ASELECT+%3Furi+%3Fname+%3Fdomain%0D%0AWHERE+%7B%0D%0A%3Furi+%3Fb+foaf%3AOrganization+.%0D%0A%3Furi+foaf%3Aname+%3Fname+.%0D%0A%3Furi+dcterms%3Aidentifier+%3Fdomain+.%0D%0A%7D+%0D%0A&output=json');
+//ORGANIZATION
+define('R2R_ORGANIZATION_SPARQL', 'http://linked.rvdata.us/sparql?query=PREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2003%2F01%2Fgeo%2Fwgs84_pos%23%3E%0D%0APREFIX+foaf%3A+%3Chttp%3A%2F%2Fxmlns.com%2Ffoaf%2F0.1%2F%3E%0D%0APREFIX+r2r%3A+%3Chttp%3A%2F%2Flinked.rvdata.us%2Fvocab%2Fresource%2Fclass%2F%3E%0D%0APREFIX+vcard%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2Fvcard-rdf%2F3.0%23%3E%0D%0APREFIX+dcterms%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0D%0APREFIX+gn%3A+%3Chttp%3A%2F%2Fwww.geonames.org%2Fontology%23%3E%0D%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0D%0APREFIX+r2rterms%3A+%3Chttp%3A%2F%2Fvoc.rvdata.us%2F%3E%0D%0APREFIX+map%3A+%3Cfile%3Amap-r2r.n3%23%3E%0D%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0D%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0D%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0D%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0D%0ASELECT+%3Furi+%3Fname+%3Fdomain%0D%0AWHERE+%7B%0D%0A%3Furi+%3Fb+foaf%3AOrganization+.%0D%0A%3Furi+foaf%3Aname+%3Fname+.%0D%0A%3Furi+dcterms%3Aidentifier+%3Fdomain+.%0D%0A%7D+%0D%0A&output=json');
+//define('R2R_ORGANIZATION_SPARQL','http://linked.rvdata.us/sparql?query=PREFIX+geo%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2003%2F01%2Fgeo%2Fwgs84_pos%23%3E%0D%0APREFIX+foaf%3A+%3Chttp%3A%2F%2Fxmlns.com%2Ffoaf%2F0.1%2F%3E%0D%0APREFIX+r2r%3A+%3Chttp%3A%2F%2Flinked.rvdata.us%2Fvocab%2Fresource%2Fclass%2F%3E%0D%0APREFIX+vcard%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2Fvcard-rdf%2F3.0%23%3E%0D%0APREFIX+dcterms%3A+%3Chttp%3A%2F%2Fpurl.org%2Fdc%2Fterms%2F%3E%0D%0APREFIX+gn%3A+%3Chttp%3A%2F%2Fwww.geonames.org%2Fontology%23%3E%0D%0APREFIX+rdfs%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2000%2F01%2Frdf-schema%23%3E%0D%0APREFIX+r2rterms%3A+%3Chttp%3A%2F%2Fvoc.rvdata.us%2F%3E%0D%0APREFIX+map%3A+%3Cfile%3Amap-r2r.n3%23%3E%0D%0APREFIX+owl%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2002%2F07%2Fowl%23%3E%0D%0APREFIX+xsd%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2001%2FXMLSchema%23%3E%0D%0APREFIX+rdf%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F1999%2F02%2F22-rdf-syntax-ns%23%3E%0D%0APREFIX+skos%3A+%3Chttp%3A%2F%2Fwww.w3.org%2F2004%2F02%2Fskos%2Fcore%23%3E%0D%0ASELECT+DISTINCT+%3Finstance+WHERE+%7B+%3Finstance+a+%3Chttp%3A%2F%2Fxmlns.com%2Ffoaf%2F0.1%2FOrganization%3E+%7D+ORDER+BY+%3Finstance&output=json');
+//SHIPS
+define('SHIPS_URL', 'http://strs.unols.org/services/ships.svc/json/GetAllShips');
+define('R2R_SHIP_URL', 'http://linked.rvdata.us/resource/vessel/');
+
+//COUNTRY
+define('R2R_COUNTRY_VOCAB', 'http://voc.rvdata.us/country');
+//ISO Country Codes - discovered at http://www.iso.org/iso/country_codes/iso_3166_code_lists.htm
+define('ISO_COUNTRIES_URL', 'http://www.iso.org/iso/list-en1-semic-3.txt');
+
+//ROLES
+define('R2R_ROLES', 'http://voc.rvdata.us/role');
+
+/*
+ * PERMISSIONS
+ */
+define('PERMISSION_PORT_UPDATE', 'update ports');
+define('PERMISSION_SHIPS_UPDATE', 'update ships');
+define('PERMISSION_VEHICLES_UPDATE', 'update vehicles');
+define('PERMISSION_ORG_UPDATE', 'update organizations');
+define('PERMISSION_COUNTRY_UPDATE', 'update countries');
+
+function cp_vocabs_permission() {
+  return array(
+    PERMISSION_PORT_UPDATE => array(
+      'title' => t('Update Port Listings'),
+      'description' => t('Updates the port listing from the URL: ') . PORTS_URL,
+    ),
+    PERMISSION_SHIPS_UPDATE => array(
+      'title' => t('Update Ship Listings'),
+      'description' => t('Updates the ship listing from the URL: ') . SHIPS_URL,
+    ),
+    PERMISSION_VEHICLES_UPDATE => array(
+      'title' => t('Update Vehicles Listings'),
+      'description' => t('Updates the vehicle listing from the URL: '),
+    ),
+    PERMISSION_COUNTRY_UPDATE => array(
+      'title' => t('Update Country Taxonomy'),
+      'description' => t('Updates the country vocabaulary'),
+    ),
+    PERMISSION_ORG_UPDATE => array(
+      'title' => t('Update Organization Taxonomy'),
+      'description' => t('Updates the organization vocabaulary'),
+    ),
+  );
+}
+
+function cp_vocabs_menu() {
+  $items['iso/country'] = array(
+    'title' => 'ISO Country Codes',
+    'type' => MENU_NORMAL_ITEM,
+    'description' => t('View list of countries'),
+    'access callback' => 'cp_vocabs_countries_access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cp_vocabs_countries_iso_form'),
+  );
+  $items['r2r/country'] = array(
+    'title' => 'R2R Country Vocabulary',
+    'type' => MENU_NORMAL_ITEM,
+    'description' => t('View country vocabulary at ' . R2R_COUNTRY_VOCAB),
+    'access callback' => 'cp_vocabs_countries_access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cp_vocabs_countries_r2r_form'),
+  );
+
+  $items['r2r/organization'] = array(
+    'title' => 'R2R Organization Vocabulary',
+    'type' => MENU_NORMAL_ITEM,
+    'description' => t('View organization vocabulary'),
+    'access callback' => 'cp_vocabs_org_access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cp_vocabs_org_form'),
+  );
+
+
+  $items['unols/ports'] = array(
+    'title' => 'UNOLS Ports',
+    'type' => MENU_NORMAL_ITEM,
+    'description' => t('View list of UNOLS Ports'),
+    'access callback' => 'cp_vocabs_ports_access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cp_vocabs_ports_page', 0),
+  );
+  $items['r2r/ports'] = array(
+    'title' => 'R2R Ports',
+    'type' => MENU_NORMAL_ITEM,
+    'description' => t('View list of R2R Ports'),
+    'access callback' => 'cp_vocabs_ports_access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cp_vocabs_ports_page', 0),
+  );
+
+  $items['unols/ships'] = array(
+    'title' => 'UNOLS Ships',
+    'type' => MENU_NORMAL_ITEM,
+    'description' => t('View list of UNOLS Ships'),
+    'access callback' => 'cp_vocabs_ships_access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cp_vocabs_ships_page', 0),
+  );
+
+  $items['unols/ports/update'] = array(
+    'title' => 'Update Ports',
+    'type' => MENU_LOCAL_TASK,
+    'description' => 'Update the ports taxonomy from the url: ' . PORTS_URL,
+    'access callback' => 'cp_vocabs_ports_access',
+    'page callback' => 'cp_vocabs_ports_consume',
+  );
+
+  return $items;
+}
+
+function cp_vocabs_rdf_namespaces(){
+  return array(
+    'dc'       => 'http://purl.org/dc/elements/1.1/',
+    'dcterms'       => 'http://purl.org/dc/terms/',
+  );
+}
+
+function cp_vocabs_taxonomy_term_presave($term) {
+
+
+  //guid is a property attached to taxonomy terms by taxonomy_xml
+  if ($term->guid) {
+
+    if ($term->type == $ns['skos'] . 'Concept') {
+
+      if ($term->predicates && !empty($term->predicates)) {
+
+        foreach ($term->predicates as $predicate => $values) {
+
+          if ($predicate == $ns['skos'] . 'definition' && $term->predicates[$predicate]['0']) {
+            $term->description = $term->predicates['http://www.w3.org/2004/02/skos/core#definition']['0'];
+          } else {
+            foreach ($ns as $abbrev => $uri) {
+              if (strstr($predicate, $uri)) {
+                $pred = substr($predicate, strlen($uri));
+                $field = 'field_' . $abbrev . '_' . $pred;
+
+                
+                if (property_exists($term, $field)) {
+                  $term->{$field}[LANGUAGE_NONE] = _cp_vocabs_seadatanet_get_values($values, 'value');
+                } else {
+                  
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function cp_vocabs_ports_access() {
+  return user_access(PERMISSION_PORT_UPDATE);
+}
+
+function cp_vocabs_ships_access() {
+  return user_access(PERMISSION_SHIPS_UPDATE);
+}
+
+function cp_vocabs_countries_access() {
+  return user_access(PERMISSION_COUNTRY_UPDATE);
+}
+
+function cp_vocabs_org_access() {
+  return user_access(PERMISSION_ORG_UPDATE);
+}
+
+function cp_vocabs_ships_page() {
+
+  $vocab = _cp_vocabs_get_ships_taxonomy();
+  if ($vocab) {
+    $vocab = $vocab['ships'];
+  }
+
+  $vocab_uri = SHIPS_URL;
+
+  $ships = _cp_vocabs_get_ships($vocab_uri);
+
+  $disabled = array();
+
+  $rows = array();
+
+  if (!empty($ships)) {
+    foreach ($ships as $ship) {
+      $name = check_plain($ship['Name']);
+      $abbrev = check_plain($ship['Abbr']);
+      $callsign = check_plain($ship['CallSign']);
+      $id = check_plain($ship['ID']);
+      $ices = check_plain($ship['IcesShipCode']);
+      $imo = check_plain($ship['ImoCode']);
+      $officialNumber = check_plain($ship['OfficialNumber']);
+      $unolsID = check_plain($ship['UnolsShipID']);
+      $shipclass = check_plain($ship['ShipClass']);
+      $homeport = check_plain($ship['Homeport']);
+      $hid = check_plain($ship['HomeportID']);
+      $operator = check_plain($ship['Institution']);
+
+      $has_term = FALSE;
+
+      if (!empty($vocab)) {
+        $has_term = array_key_exists($id, $vocab);
+        $diff_name = FALSE;
+        if ($has_term) {
+          $diff_name = trim($vocab[$id]->name) != trim($name);
+          if (!$diff_name) {
+            $disabled[] = $id;
+          }
+        }
+      }
+
+      $row_name = $has_term ? $vocab[$id]->name : $name;
+      if (strlen($abbrev) > 0) {
+        $row_name .= ' (' . t($abbrev) . ')';
+      }
+
+      $rows[$id] = array(
+        'name' => array(
+          'data' => t($row_name),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'callsign' => array(
+          'data' => t($callsign),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'id' => array(
+          'data' => t($id),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'ices' => array(
+          'data' => l(t($ices), R2R_SHIP_URL . t($ices), array('attributes' => array('target' => '_blank'))),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'imo' => array(
+          'data' => t($imo),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'official_number' => array(
+          'data' => t($officialNumber),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'unols_id' => array(
+          'data' => t($unolsID),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'shipclass' => array(
+          'data' => t($shipclass),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'homeport' => array(
+          'data' => t($homeport . ' (' . $hid . ')'),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'operator' => array(
+          'data' => t($operator),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'diff' => array(
+          'data' => t($has_term ? $diff_name ? 'Name Change("' . $vocab[$id]->name . '"): "' . $name . '"' : 'No changes'  : 'New Ship'),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+      );
+    }
+  }
+
+  $header = array(
+    'name' => array(
+      'data' => t('Name'),
+      'nowrap' => 'nowrap',
+    ),
+    'operator' => array(
+      'data' => t('Operator'),
+      'nowrap' => 'nowrap',
+    ),
+    'homeport' => array(
+      'data' => t('Home Port'),
+      'nowrap' => 'nowrap',
+    ),
+    'callsign' => array(
+      'data' => t('Call Sign'),
+      'nowrap' => 'nowrap',
+    ),
+    'id' => array(
+      'data' => t('UNOLS ID'),
+      'nowrap' => 'nowrap',
+    ),
+    'ices' => array(
+      'data' => t('ICES'),
+      'nowrap' => 'nowrap',
+    ),
+    'imo' => array(
+      'data' => t('IMO'),
+      'nowrap' => 'nowrap',
+    ),
+    'official_number' => array(
+      'data' => t('Official ID'),
+      'nowrap' => 'nowrap',
+    ),
+    'unols_id' => array(
+      'data' => t('UNOLS ID'),
+      'nowrap' => 'nowrap',
+    ),
+    'shipclass' => array(
+      'data' => t('Ship Class'),
+      'nowrap' => 'nowrap',
+    ),
+    'diff' => array(
+      'data' => t('Changes?'),
+      'nowrap' => 'nowrap',
+    ),
+  );
+
+  $form['ships'] = array(
+    '#type' => 'tableselect',
+    '#header' => $header,
+    '#options' => $rows,
+    '#empty' => t('No results'),
+    '#multiple' => TRUE,
+    '#attributes' => array('valign' => 'top', 'nowrap' => 'nowrap'),
+  );
+
+  $form['vocabulary'] = array(
+    '#type' => 'hidden',
+    '#value' => $vocab_uri,
+  );
+
+  if (!empty($disabled)) {
+    foreach ($disabled as $sid) {
+      $form['ships'][$sid]['#disabled'] = TRUE;
+    }
+  }
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Import',
+  );
+
+  $form['#submit'][] = 'cp_vocab_ships_form_submit';
+
+  return $form;
+}
+
+function cp_vocab_ships_form_submit($form, &$form_state) {
+
+  $ships = _cp_vocabs_get_ships($form_state['values']['vocabulary']);
+  $imports = $form_state['values']['ships'];
+  $taxonomy = _cp_vocabs_get_ships_taxonomy();
+
+  if (!empty($imports)) {
+
+    $homeports = array();
+    $ports = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_PORTS)->vid, 0, NULL, TRUE);
+    foreach ($ports as $port) {
+      if (!empty($port->field_unols_id)) {
+        $key = $port->field_unols_id['und']['0']['value'];
+        $homeports[$key] = $port;
+      }
+    }
+
+    foreach ($imports as $unols_id => $checked) {
+      if ($checked) {
+
+        if (array_key_exists($unols_id, $ships)) {
+
+          $term = new stdClass();
+          field_attach_presave('term', $term);
+
+          if (array_key_exists($unols_id, $taxonomy['ships'])) {
+            //update
+            $term->original = $taxonomy['ships'][$unols_id];
+            $term->tid = $term->original->tid;
+          }
+
+          $term->vid = $taxonomy['vid'];
+          $term->name = $ships[$unols_id]['Name'];
+          $term->field_call_sign['und']['0']['value'] = $ships[$unols_id]['CallSign'];
+          $term->field_unols_id['und']['0']['value'] = $unols_id;
+          $term->field_ices_code['und']['0']['value'] = $ships[$unols_id]['IcesShipCode'];
+          $term->field_imo_code['und']['0']['value'] = $ships[$unols_id]['ImoCode'];
+          $term->field_official_number['und']['0']['value'] = $ships[$unols_id]['OfficialNumber'];
+          $term->field_ship_class['und']['0']['value'] = $ships[$unols_id]['ShipClass'];
+          $term->field_operator['und']['0']['value'] = $ships[$unols_id]['Institution'];
+          $term->field_abbreviation['und']['0']['value'] = $ships[$unols_id]['Abbr'];
+          $term->field_unols_ship_id['und']['0']['value'] = $ships[$unols_id]['UnolsShipID'];
+
+          if (array_key_exists($ships[$unols_id]['HomeportID'], $homeports)) {
+            $term->field_port['und']['0']['target_id'] = $homeports[$ships[$unols_id]['HomeportID']]->tid;
+          }
+          taxonomy_term_save($term);
+        }
+      }
+    }
+  }
+}
+
+function cp_vocabs_ports_page($provider = 'unols') {
+  $start_index = 0;
+  $port_max = 500;
+  if (array_key_exists('page', $_GET) && is_numeric($_GET['page'])) {
+    $start_index = intval($_GET['page']) * $port_max;
+  }
+
+  $vocab = _cp_vocabs_get_ports_taxonomy();
+  if ($vocab) {
+    $vocab = $vocab['ports'];
+  }
+
+  $is_r2r = $provider == 'r2r';
+
+  if ($is_r2r) {
+    $vocab_uri = R2R_PORT_SPARQL;
+  } else {
+    $vocab_uri = PORTS_URL;
+  }
+
+  $ports = _cp_vocabs_get_ports($vocab_uri);
+
+  $disabled = array();
+
+  $total = 0;
+  $end_index = $port_max + intval($start_index);
+
+  $rows = array();
+  if (!empty($ports)) {
+
+    $port_num = count($ports);
+    if ($end_index > $port_num) {
+      $end_index = $port_num;
+    }
+
+    if (intval($start_index) < $port_num) {
+      foreach ($ports as $port) {
+        if (intval($total) <= intval($start_index)) {
+          $total++;
+          continue;
+        }
+        if (intval($total) == intval($end_index)) {
+          break;
+        }
+        $name = check_plain($port['Name']);
+        $altName = check_plain($port['AlternateName']);
+        $state = check_plain($port['State']);
+        $country = check_plain($port['Country']);
+        $lat = check_plain($port['Lat']);
+        $lon = check_plain($port['Lon']);
+        $wpi = check_plain($port['WpiID']);
+        $id = check_plain($port['ID']);
+        $info = check_plain($port['Info']);
+        $uri = ''; //$wpi > 0 ? 'http://linked.rvdata.us/resource/port/' . $wpi . '?output=rdfxml' : '';
+
+        $has_term = FALSE;
+
+        if (!empty($vocab)) {
+          $has_term = array_key_exists($id, $vocab);
+          $diff_name = FALSE;
+          if ($has_term) {
+            $diff_name = trim($vocab[$id]->name) != trim($name);
+            if (!$diff_name) {
+              $disabled[] = $id;
+            }
+          }
+        }
+
+        $total++;
+
+        $row_name = $has_term ? $vocab[$id]->name : $name;
+        if (strlen($altName) > 0) {
+          $row_name .= ' (' . t($altName) . ')';
+        }
+
+        $rows[$id] = array(
+          'name' => array(
+            'data' => t($row_name),
+            'valign' => 'top',
+            'nowrap' => 'nowrap',
+          ),
+          'state' => array(
+            'data' => t($state),
+            'valign' => 'top',
+            'nowrap' => 'nowrap',
+          ),
+          'country' => array(
+            'data' => t($country),
+            'valign' => 'top',
+            'nowrap' => 'nowrap',
+          ),
+          'lat' => array(
+            'data' => t($lat),
+            'valign' => 'top',
+            'nowrap' => 'nowrap',
+          ),
+          'long' => array(
+            'data' => t($lon),
+            'valign' => 'top',
+            'nowrap' => 'nowrap',
+          ),
+          'wpi' => array(
+            'data' => t($wpi),
+            'valign' => 'top',
+            'nowrap' => 'nowrap',
+          ),
+          'unols_id' => array(
+            'data' => t($id),
+            'valign' => 'top',
+            'nowrap' => 'nowrap',
+          ),
+          'diff' => array(
+            'data' => t($has_term ? $diff_name ? 'Name Change("' . $vocab[$id]->name . '"): "' . $name . '"' : 'No changes'  : 'New Port'),
+            'valign' => 'top',
+            'nowrap' => 'nowrap',
+          ),
+        );
+      }
+    }
+  }
+
+  $header = array(
+    'name' => array(
+      'data' => t('Name'),
+      'nowrap' => 'nowrap',
+    ),
+    'state' => array(
+      'data' => t('State'),
+      'nowrap' => 'nowrap',
+    ),
+    'country' => array(
+      'data' => t('Country'),
+      'nowrap' => 'nowrap',
+    ),
+    'lat' => array(
+      'data' => t('Lat'),
+      'nowrap' => 'nowrap',
+    ),
+    'long' => array(
+      'data' => t('Long'),
+      'nowrap' => 'nowrap',
+    ),
+    'wpi' => array(
+      'data' => t('World Port Index'),
+      'nowrap' => 'nowrap',
+    ),
+    'unols_id' => array(
+      'data' => t('UNOLS ID'),
+      'nowrap' => 'nowrap',
+    ),
+    'diff' => array(
+      'data' => t('Changes?'),
+      'nowrap' => 'nowrap',
+    ),
+  );
+
+  $page = pager_default_initialize($port_num, $port_max);
+
+  $pager = theme('pager');
+
+  $form['ports'] = array(
+    '#type' => 'tableselect',
+    '#header' => $header,
+    '#options' => $rows,
+    '#empty' => t('No results'),
+    '#multiple' => TRUE,
+    '#prefix' => 'Displaying ' . intval($start_index) . ' - ' . $end_index . ' of ' . $port_num . '<div style="float:right">' . $pager . '</div>',
+    '#attributes' => array('valign' => 'top', 'nowrap' => 'nowrap'),
+  );
+
+  $form['vocabulary'] = array(
+    '#type' => 'hidden',
+    '#value' => $vocab_uri,
+  );
+
+  if (!empty($disabled)) {
+    foreach ($disabled as $port_index) {
+      $form['ports'][$port_index]['#disabled'] = TRUE;
+    }
+  }
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Import',
+  );
+
+  $form['#submit'][] = 'cp_vocab_ports_form_submit';
+
+  return $form;
+}
+
+function cp_vocab_ports_form_submit($form, &$form_state) {
+
+  $ports = _cp_vocabs_get_ports($form_state['values']['vocabulary']);
+  $imports = $form_state['values']['ports'];
+  $taxonomy = _cp_vocabs_get_ports_taxonomy();
+
+  if (!empty($imports)) {
+
+    foreach ($imports as $unols_id => $checked) {
+      if ($checked) {
+
+        if (array_key_exists($unols_id, $ports)) {
+
+          $wpi = $ports[$unols_id]['WpiID'];
+
+          $import[] = $ports[$unols_id];
+
+          $term = new stdClass();
+          field_attach_presave('term', $term);
+
+          if (array_key_exists($unols_id, $taxonomy['ports'])) {
+            //update
+            $term->original = $taxonomy['ports'][$unols_id];
+            $term->tid = $term->original->tid;
+          }
+
+          $term->vid = $taxonomy['vid'];
+          $term->name = $ports[$unols_id]['Name'];
+          $term->field_alternate_name['und']['0']['value'] = $ports[$unols_id]['AlternateName'];
+          $term->field_unols_id['und']['0']['value'] = $unols_id;
+          $term->field_port_state['und']['0']['value'] = $ports[$unols_id]['State'];
+
+          $term->field_location['und']['0']['lat'] = $ports[$unols_id]['Lat'];
+          $term->field_location['und']['0']['lng'] = $ports[$unols_id]['Lon'];
+          geolocation_field_presave('taxonomy_term', TAXONOMY_PORTS, NULL, NULL, NULL, $term->field_location['und']['0']);
+
+          $country = $ports[$unols_id]['Country'];
+
+          $country_term = cp_vocabs_get_country_term($ports[$unols_id]['Country']);
+          if ($country_term) {
+            $term->field_country['und']['0']['target_id'] = key($country_term);
+          }
+
+          if ($wpi > 0) {
+            $term->field_world_port_index['und'][0]['value'] = $wpi;
+          }
+          taxonomy_term_save($term);
+        }
+      }
+    }
+  }
+}
+
+function cp_vocabs_get_country_term($country) {
+  $term = taxonomy_get_term_by_name($country, TAXONOMY_COUNTRIES);
+  if ($term) {
+    return $term;
+  }
+
+  $countries = &drupal_static(__FUNCTION__);
+
+  if (!isset($countries)) {
+    $countries = array();
+    $countries('USA', 'United States');
+  }
+
+  if (in_array($country, $countries)) {
+    return cp_vocabs_get_country_term(array_search($country, $countries));
+  } else if (array_key_exists($country, $countries)) {
+    return cp_vocabs_get_country_term($countries[$country]);
+  }
+  return FALSE;
+}
+
+function cp_vocabs_countries_r2r_form() {
+
+  $vocab = _cp_vocabs_get_country_taxonomy();
+  if ($vocab) {
+    $vocab = $vocab['countries'];
+  }
+
+  $vocab_uri = R2R_COUNTRY_VOCAB;
+  $countries = _cp_vocabs_get_countries($vocab_uri);
+
+  $options = array();
+  $disabled = array();
+
+  if (!empty($countries)) {
+
+    foreach ($countries as $country) {
+      $name = trim($country['name']);
+      $code = trim($country['code']);
+
+      $has_term = FALSE;
+      if (!empty($vocab)) {
+        $has_term = array_key_exists($code, $vocab);
+
+        $diff_name = FALSE;
+        if ($has_term) {
+          $diff_name = $vocab[$code]->name != $name;
+          if (!$diff_name) {
+            $disabled[] = $code;
+          }
+        }
+      }
+
+      $options[$code] = array(
+        'name' => array(
+          'data' => t($has_term ? $vocab[$code]->name : $name),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'uri' => array(
+          'data' => t($country['uri']),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'code' => array(
+          'data' => t($code),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'diff' => array(
+          'data' => t($has_term ? $diff_name ? 'Name Change("' . $vocab[$code]->name . '"): "' . $name . '"' : 'No changes'  : 'New Country'),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+      );
+      if ($diff_name) {
+        $options[$code]['#attributes'] = array('class' => array('term-diff'));
+      }
+    }
+  }
+
+  return cp_vocabs_countries_form($vocab_uri, $options, $disabled);
+}
+
+function cp_vocabs_countries_iso_form() {
+
+  $vocab = _cp_vocabs_get_country_taxonomy();
+  $vocab_uri = ISO_COUNTRIES_URL;
+  $countries = _cp_vocabs_get_countries($vocab_uri);
+
+  $options = array();
+  $disabled = array();
+
+  if (!empty($countries)) {
+
+    foreach ($countries as $country) {
+      $name = $country['name'];
+      $code = $country['code'];
+
+      $has_term = FALSE;
+      if (!empty($vocab)) {
+        $has_term = in_array($code, $vocab);
+
+        $diff_name = FALSE;
+        if ($has_term) {
+          $diff_name = $vocab[$code]['name'] != $name;
+          if (!$diff_name) {
+            $disabled[] = $code;
+          }
+        }
+      }
+
+      $options[$code] = array(
+        'name' => array(
+          'data' => t($has_term ? $vocab[$code]['name'] : $name),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'uri' => array(
+          'data' => '',
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'code' => array(
+          'data' => t($code),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'diff' => array(
+          'data' => t($has_term ? $diff_name ? 'Name Change("' . $vocab[$code]['name'] . '"): "' . $name . '"' : 'No changes'  : 'New Country'),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+      );
+      if ($diff_name) {
+        $options[$code]['#attributes'] = array('class' => array('term-diff'));
+      }
+    }
+  }
+
+  return cp_vocabs_countries_form($vocab_uri, $options, $disabled);
+}
+
+function cp_vocabs_countries_form($vocab_uri, $countries, $disabled) {
+
+  $header = array(
+    'name' => array(
+      'data' => t('Country'),
+      'nowrap' => 'nowrap',
+    ),
+    'uri' => array(
+      'data' => t('URI'),
+      'nowrap' => 'nowrap',
+    ),
+    'code' => array(
+      'data' => t('ISO Code'),
+      'nowrap' => 'nowrap',
+    ),
+    'diff' => array(
+      'data' => t('Info'),
+      'nowrap' => 'nowrap',
+    ),
+  );
+
+  $total = 0;
+  $rows = array();
+
+  drupal_add_css(drupal_get_path('module', 'cp_vocabs') . '/cp_vocabs.css');
+
+
+  $form['countries'] = array(
+    '#type' => 'tableselect',
+    '#header' => $header,
+    '#options' => $countries,
+    '#empty' => t('No results'),
+    '#multiple' => TRUE,
+    '#prefix' => 'Total: ' . count($countries),
+    '#attributes' => array('valign' => 'top', 'nowrap' => 'nowrap'),
+  );
+  $form['vocabulary'] = array(
+    '#type' => 'hidden',
+    '#value' => $vocab_uri,
+  );
+
+  if (!empty($disabled)) {
+    foreach ($disabled as $country) {
+      $form['countries'][$country]['#disabled'] = TRUE;
+    }
+  }
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Import',
+  );
+  //$form['#validate'][] = 'cp_vocab_countries_validate';
+  $form['#submit'][] = 'cp_vocab_countries_form_submit';
+
+  return $form;
+}
+
+function cp_vocab_countries_form_submit($form, &$form_state) {
+
+  $countries = _cp_vocabs_get_countries($form_state['values']['vocabulary']);
+  $imports = $form_state['values']['countries'];
+  $taxonomy = _cp_vocabs_get_country_taxonomy();
+
+  if (!empty($imports)) {
+    foreach ($imports as $country_code) {
+      if (array_key_exists($country_code, $countries)) {
+
+        $import[] = $countries[$country_code];
+
+        $term = new stdClass();
+        field_attach_presave('term', $term);
+
+        if (array_key_exists($country_code, $taxonomy['countries'])) {
+          //update
+          $term->original = $taxonomy['countries'][$country_code];
+          $term->tid = $term->original->tid;
+        }
+
+        $term->vid = $taxonomy['vid'];
+        $term->name = $countries[$country_code]['name'];
+        $term->field_rdf_uri['und']['0']['url'] = $countries[$country_code]['uri'];
+        $term->field_iso_code['und']['0']['value'] = $countries[$country_code]['code'];
+
+        //commented out sets weight to '0' which will rank terms alphabetically @see taxonomy_vocabulary_confirm_reset_alphabetical_submit()
+        //$term->weight = $countries[$country_code]['rank'];
+        taxonomy_term_save($term);
+      }
+    }
+  }
+}
+
+function cp_vocabs_org_form() {
+
+  $vocab = _cp_vocabs_get_org_taxonomy();
+  if ($vocab) {
+    $vocab = $vocab['orgs'];
+  }
+
+  $vocab_uri = R2R_ORGANIZATION_SPARQL;
+  $organizations = cp_vocabs_get_orgs($vocab_uri);
+
+  $options = array();
+  $disabled = array();
+
+  if (!empty($organizations)) {
+
+    foreach ($organizations as $o_uri => $org) {
+      $name = trim($org['name']);
+      $domain = trim($org['domain']);
+
+      $diff_name = FALSE;
+      $has_term = FALSE;
+      if (!empty($vocab)) {
+        $has_term = array_key_exists($o_uri, $vocab);
+
+        if ($has_term) {
+          $diff_name = $vocab[$o_uri]->name != $name;
+          if (!$diff_name) {
+            $disabled[] = $o_uri;
+          }
+        }
+      }
+
+      $options[$o_uri] = array(
+        'name' => array(
+          'data' => t($has_term ? $vocab[$o_uri]->name : $name),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'code' => array(
+          'data' => t($domain),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'uri' => array(
+          'data' => t($o_uri),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+        'diff' => array(
+          'data' => t($has_term ? $diff_name ? 'Name Change("' . $vocab[$o_uri]->name . '"): "' . $name . '"' : 'No changes'  : 'New Org'),
+          'valign' => 'top',
+          'nowrap' => 'nowrap',
+        ),
+      );
+      if ($diff_name) {
+        $options[$o_uri]['#attributes'] = array('class' => array('term-diff'));
+      }
+    }
+  }
+
+  $header = array(
+    'name' => array(
+      'data' => t('Organization'),
+      'nowrap' => 'nowrap',
+    ),
+    'code' => array(
+      'data' => t('Domain'),
+      'nowrap' => 'nowrap',
+    ),
+    'uri' => array(
+      'data' => t('URI'),
+      'nowrap' => 'nowrap',
+    ),
+    'diff' => array(
+      'data' => t('Info'),
+      'nowrap' => 'nowrap',
+    ),
+  );
+
+  $total = 0;
+  $rows = array();
+
+  drupal_add_css(drupal_get_path('module', 'cp_vocabs') . '/cp_vocabs.css');
+
+  $form['orgs'] = array(
+    '#type' => 'tableselect',
+    '#header' => $header,
+    '#options' => $options,
+    '#empty' => t('No results'),
+    '#multiple' => TRUE,
+    '#prefix' => 'Total: ' . count($options),
+    '#attributes' => array('valign' => 'top', 'nowrap' => 'nowrap'),
+  );
+  $form['vocabulary'] = array(
+    '#type' => 'hidden',
+    '#value' => $vocab_uri,
+  );
+
+  if (!empty($disabled)) {
+    foreach ($disabled as $d_org) {
+      $form['orgs'][$d_org]['#disabled'] = TRUE;
+    }
+  }
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Import',
+  );
+  $form['#submit'][] = 'cp_vocab_org_form_submit';
+
+  return $form;
+}
+
+function cp_vocab_org_form_submit($form, &$form_state) {
+
+  $organizations = cp_vocabs_get_orgs($form_state['values']['vocabulary']);
+  $imports = $form_state['values']['orgs'];
+  $taxonomy = _cp_vocabs_get_org_taxonomy();
+
+  if (!empty($imports)) {
+    foreach ($imports as $org_uri) {
+      if ($org_uri) {
+
+        $org = $organizations[$org_uri];
+
+        $term = new stdClass();
+        field_attach_presave('term', $term);
+
+        if (array_key_exists($org_uri, $taxonomy['orgs'])) {
+          //update
+          $term->original = $taxonomy['orgs'][$org_uri];
+          $term->tid = $term->original->tid;
+        }
+
+        $term->vid = $taxonomy['vid'];
+        $term->name = $org['name'];
+        $term->field_rdf_uri['und']['0']['url'] = $org_uri;
+        $term->field_domain['und']['0']['value'] = $org['domain'];
+
+        taxonomy_term_save($term);
+      }
+    }
+  }
+}
+
+function _cp_vocabs_get_ships_taxonomy() {
+  $ships = taxonomy_vocabulary_machine_name_load(TAXONOMY_SHIPS);
+  $terms = taxonomy_get_tree($ships->vid, 0, NULL, TRUE);
+  $vocab = array();
+  $vocab['vid'] = $ships->vid;
+  if (!empty($terms)) {
+    foreach ($terms as $term) {
+      if (array_key_exists('und', $term->field_unols_id)) {
+        $vocab['ships'][$term->field_unols_id['und']['0']['value']] = $term;
+      }
+    }
+  } else {
+    $vocab['ships'] = array();
+  }
+  return $vocab;
+}
+
+function _cp_vocabs_get_ports_taxonomy() {
+  $ports = taxonomy_vocabulary_machine_name_load(TAXONOMY_PORTS);
+  $terms = taxonomy_get_tree($ports->vid, 0, NULL, TRUE);
+  $vocab = array();
+  $vocab['vid'] = $ports->vid;
+  if (!empty($terms)) {
+    foreach ($terms as $term) {
+      if (array_key_exists('und', $term->field_unols_id)) {
+        $vocab['ports'][$term->field_unols_id['und']['0']['value']] = $term;
+      }
+    }
+  } else {
+    $vocab['ports'] = array();
+  }
+  return $vocab;
+}
+
+function _cp_vocabs_get_country_taxonomy() {
+  $countries = taxonomy_vocabulary_machine_name_load(TAXONOMY_COUNTRIES);
+  $terms = taxonomy_get_tree($countries->vid, 0, NULL, TRUE);
+  $vocab = array();
+  $vocab['vid'] = $countries->vid;
+  if (!empty($terms)) {
+    foreach ($terms as $term) {
+      if (array_key_exists('und', $term->field_iso_code)) {
+        $vocab['countries'][$term->field_iso_code['und']['0']['value']] = $term;
+      }
+    }
+  } else {
+    $vocab['countries'] = array();
+  }
+  return $vocab;
+}
+
+function _cp_vocabs_get_org_taxonomy() {
+  $orgs = taxonomy_vocabulary_machine_name_load(TAXONOMY_ORG);
+  $terms = taxonomy_get_tree($orgs->vid, 0, NULL, TRUE);
+  $vocab = array();
+  $vocab['vid'] = $orgs->vid;
+  if (!empty($terms)) {
+    foreach ($terms as $term) {
+      if (array_key_exists('und', $term->field_rdf_uri)) {
+        $vocab['orgs'][$term->field_rdf_uri['und']['0']['url']] = $term;
+      }
+    }
+  } else {
+    $vocab['orgs'] = array();
+  }
+  return $vocab;
+}
+
+function _cp_vocabs_get_ships($uri) {
+  $ship = array();
+  $u_ships = _cp_vocabs_get_json($uri);
+  foreach ($u_ships as $ship) {
+    $ships[$ship['ID']] = $ship;
+  }
+  return $ships;
+}
+
+function _cp_vocabs_get_ports($uri) {
+  //if ($cached = cache_get($uri, 'cache')) {
+  //  return $cached->data;
+  //}
+
+  $ports = array();
+
+  if ($uri == PORTS_URL) {
+    $u_ports = _cp_vocabs_get_json(PORTS_URL);
+
+    foreach ($u_ports as $port) {
+      $ports[$port['ID']] = $port;
+    }
+  } else {
+
+    $ports = _cp_vocabs_get_json(R2R_PORT_SPARQL);
+
+    $count = 0;
+    foreach ($ports['results']['bindings'] as $r2r_port) {
+
+      if ($count == 10) {
+        break;
+      }
+
+      $uri = $r2r_port['instance']['value'] . '?output=rdfxml';
+      $uri = preg_replace('/\/resource\//', '/data/', $uri);
+
+      if ($cached = cache_get($uri, 'cache')) {
+        $rdf[$uri] = $cached->data;
+      } else {
+        $rdf[$uri] = _cp_vocabs_parse_rdf($uri);
+        cache_set($uri, $rdf, 'cache', time() + 60 * 60); //1 hour
+      }
+      $count++;
+
+      $options = array(
+        'r2rterms' => 'country',
+        'dcterms' => 'identifier',
+        'geo' => 'long',
+        'rdfs' => 'label',
+        'geo' => 'lat',
+      );
+      $triples[$uri] = _cp_vocabs_parse_triples($rdf[$uri]['0']['triples'], $rdf[$uri]['0']['namespaces'], $options);
+
+      foreach ($triples[$uri] as $uri => $predicate) {
+        $ports['ports'][$uri]['Name'] = $predicate['rdfs:label']['0']['value'];
+        $ports['ports'][$uri]['Country_URI'] = $predicate['r2rterms:country']['0']['value'];
+        $ports['ports'][$uri]['WpiID'] = $predicate['dcterms:identifier']['0']['value'];
+        $ports['ports'][$uri]['Lat'] = $predicate['geo:lat']['0']['value'];
+        $ports['ports'][$uri]['Lon'] = $predicate['geo:long']['0']['value'];
+      }
+      //r2rterms:country => rdf:Description rdf:about="http://voc.rvdata.us/country/gum"
+      //dcterms:identifier => 100001
+      //geo:long =>144.715
+      //rdfs:label => Agana
+      //geo:lat => 13.489100000000001
+    }
+  }
+
+  cache_set($uri, $ports, 'cache', time() + 60 * 60); //1 hour
+
+  return $ports;
+}
+
+function cp_vocabs_get_orgs($uri) {
+  if ($cached = cache_get($uri, 'cache')) {
+    //return $cached->data;
+  }
+
+  $orgs = array();
+  $rdf = _cp_vocabs_get_json($uri);
+
+  foreach ($rdf['results']['bindings'] as $r2r_org) {
+    $o_uri = $r2r_org['uri']['value'] . '?output=rdfxml';
+    $o_uri = preg_replace('/\/resource\//', '/data/', $o_uri);
+    $orgs[$o_uri]['name'] = check_plain($r2r_org['name']['value']);
+    $orgs[$o_uri]['domain'] = check_plain($r2r_org['domain']['value']);
+  }
+
+
+  /* PARSING RDF files *
+    $desc_name = 'RDF Description of';
+
+    $count = 0;
+    foreach ($rdf['results']['bindings'] as $r2r_org) {
+
+    $o_uri = $r2r_org['instance']['value'] . '?output=rdfxml';
+
+    if ($cached = cache_get($o_uri, 'cache')) {
+    $rdf[$o_uri] = $cached->data;
+    } else {
+    $rdf[$o_uri] = _cp_vocabs_parse_rdf($o_uri);
+    cache_set($o_uri, $rdf[$o_uri], 'cache', time() + 60 * 60); //1 hour
+    }
+
+    $count++;
+
+    $options = array(
+    'dcterms' => 'identifier',
+    'rdfs' => 'label',
+    );
+    $triples[$o_uri] = _cp_vocabs_parse_triples($rdf[$o_uri]['triples'], $rdf[$o_uri]['namespaces'], $options);
+
+    foreach ($triples[$o_uri] as $predicate => $org) {
+    if ('dcterms:identifier' == $predicate) {
+    $orgs[$o_uri]['domain'] = check_plain($org['0']['value']);
+    }
+    if ('rdfs:label' == $predicate) {
+    $name = $org['0']['value'];
+    if( substr($name, 0, strlen($desc_name)) === $desc_name ){
+    $name = substr($name, strlen($desc_name));
+    }
+    $orgs[$o_uri]['name'] = check_plain($name);
+    }
+    }
+    }
+
+
+   */
+  cache_set($uri, $orgs, 'cache', time() + 60 * 60); //1 hour
+
+  return $orgs;
+}
+
+function _cp_vocabs_get_countries($uri) {
+  if ($cached = cache_get($uri, 'cache')) {
+    return $cached->data;
+  }
+
+  $countries = array();
+
+  if (ISO_COUNTRIES_URL == $uri) {
+    //ISO - txt
+    $request = drupal_http_request($url, array('headers' => array("content-type" => "text/plain")));
+    if (isset($request->error)) {
+      drupal_set_message($request->error, 'error');
+      return NULL;
+    }
+
+    $raw = utf8_encode($request->data);
+    $len = (int) $request->headers['content-length'];
+    $semicolon = '3b';
+    $newlines = array('0a', '0d');
+    $newlineCount = 0;
+    for ($i = 0; $i < $len; $i++) {
+      $char = $request->data{$i};
+      $hex = bin2hex($char);
+      if (in_array($hex, $newlines)) {
+        $newlineCount++;
+      } else {
+        $newlineCount = 0;
+      }
+      if ($newlineCount == 4) {
+        $raw = substr($raw, $i + 1);
+        break;
+      }
+    }
+
+    $len = strlen($raw);
+    $name = '';
+    $code = '';
+    $found_semicolon = FALSE;
+    $rank = 0;
+    for ($i = 0; $i < $len; $i++) {
+      $char = $raw{$i};
+      $hex = bin2hex($char);
+      if (in_array($hex, $newlines) && strlen($name) > 0 && strlen($code) > 0) {
+        $code = check_plain($code);
+        $countries[$code] = array('name' => check_plain($name), 'code' => $code, 'rank' => $rank);
+        $rank++;
+        $name = '';
+        $code = '';
+        $found_semicolon = FALSE;
+      } else if ($hex == $semicolon) {
+        $found_semicolon = TRUE;
+      } else if (!$found_semicolon) {
+        $name = $name . $char;
+      } else {
+        $code = $code . $char;
+      }
+    }
+    if (strlen($name) > 0 && strlen($code) > 0) {
+      $countries[] = array('name' => check_plain($name), 'code' => check_plain($code), 'rank' => $rank);
+    }
+  } else {
+    //R2R - RDF
+    $rdf = _cp_vocabs_parse_rdf($uri);
+    $rdf_countries = _cp_vocabs_parse_triples($rdf['triples'], $rdf['namespaces'], array('skos' => 'narrower'));
+    $rank = 0;
+    foreach ($rdf_countries['skos:narrower'] as $country_uri) {
+      $rdf_country = _cp_vocabs_parse_rdf($country_uri['value']);
+      $triples = _cp_vocabs_parse_triples($rdf_country['triples'], $rdf_country['namespaces'], array('skos' => 'prefLabel', 'dcterms' => 'identifier'));
+      $code = '';
+      $name = '';
+      foreach ($triples as $predicate => $country) {
+        if ('dcterms:identifier' == $predicate) {
+          $code = check_plain($country['0']['value']);
+        }
+        if ('skos:prefLabel' == $predicate) {
+          $name = check_plain($country['0']['value']);
+        }
+      }
+      $countries[$code] = array(
+        'name' => $name,
+        'code' => $code,
+        'uri' => $country_uri['value'],
+        'rank' => $rank,
+      );
+      $rank++;
+    }
+  }
+
+  cache_set($uri, $countries, 'cache', time() + 60 * 60); //1 hour
+
+  return $countries;
+}
+
+function _cp_vocabs_get_json($url) {
+
+  $request = drupal_http_request($url, array('headers' => array("content-type" => "application/json")));
+  if (isset($request->error)) {
+    drupal_set_message($request->error, 'error');
+    return NULL;
+  }
+
+  return drupal_json_decode($request->data);
+}
+
+function _cp_vocabs_parse_rdf($uri) {
+  $namespaces = array();
+  
+  if ( $arc2_library_path = _cp_vocabs_arc2_library_path() ) {
+    require_once $arc2_library_path . "/ARC2.php";
+  } else {
+    $message = 'ARC2 RDF Parser is unavailable. A good location is at /sites/all/libraries/arc';
+    drupal_set_message(t($message), 'error');
+    return FALSE;
+  }
+
+  $parser = ARC2::getRDFParser();
+  $parser->parse($uri);
+  if ($parser->parser) {
+    switch ($parser->format) {
+      case 'turtle':
+        foreach ($parser->parser->prefixes as $prefix => $uri) {
+          $formatted_prefix = str_replace(':', '', $prefix);
+          $namespaces[$formatted_prefix] = $uri;
+        }
+        break;
+      default:
+        foreach ($parser->parser->nsp as $uri => $prefix) {
+          $namespaces[$prefix] = $uri;
+        }
+        break;
+    }
+  }
+  //
+  $triples = $parser->getTriples();
+  return array('triples' => $triples, 'namespaces' => $namespaces);
+}
+
+/**
+ * Return the path of the arc2 library
+ * 
+ * Semi-intelligent lookup of places I expect it to be
+ */
+function _cp_vocabs_arc2_library_path() {
+  $arc2_library_path = variable_get('arc2_library_path', '');
+  if (is_readable($arc2_library_path)) {
+    return $arc2_library_path;
+  }
+  // Try other spots?
+  $possibilities = array(
+    'sites/all/libraries/ARC2/arc', // RDFX may have wanted to install it here
+    'sites/all/libraries/arc',
+    dirname(__FILE__) . '/arc',
+  );
+  foreach ($possibilities as $arc2_library_path) {
+    if (is_readable($arc2_library_path)) {
+      variable_set('arc2_library_path', $arc2_library_path);
+      return $arc2_library_path;
+    }
+  }
+  return NULL;
+}
+
+function _cp_vocabs_parse_triples($triples, $namespaces, $namespace_values = array(), $predicate_name = 'p', $object_name = 'o') {
+  $data = array();
+  $triple_position = 0;
+  foreach ($triples as $triple) {
+    foreach ($namespace_values as $ns => $value) {
+      $ns_id = $ns . ':' . $value;
+      $ns_url = $namespaces[$ns];
+      if (_cp_vocabs_startsWith($triple[$predicate_name], $ns_url)) {
+        $ptype = substr($triple[$predicate_name], strlen($ns_url));
+        if ($ptype == $value) {
+          $data[$ns_id][] = array(
+            'value' => $triple[$object_name],
+            'triple' => $triple_position,
+          );
+        }
+      }
+    }
+    $triple_position++;
+  }
+
+  return $data;
+}
+
+function _cp_vocabs_startsWith($haystack, $needle, $index = 0) {
+  return substr($haystack, $index, strlen($needle)) === $needle;
+}
+
+function _cp_vocabs_seadatanet_get_values($values, $store_name) {
+  $field_value = array();
+
+  foreach ($values as $delta => $value) {
+    $field_value[$delta][$store_name] = $value;
+  }
+
+  return $field_value;
+}

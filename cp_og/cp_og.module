@@ -1,0 +1,498 @@
+<?php
+
+
+/*
+ * Stupid OG errors
+ * 
+ * If you delete some content, you might need to do this:
+   <code>
+   public static function getInstance($field, $instance = NULL,$entity_type = NULL, $entity = NULL) {
+    return new OgSelectionHandler($field, $instance);
+   }
+   </code>
+ * http://drupal.org/node/1574074
+ */
+
+
+
+define('OG_ADMINISTRATOR_ROLE_NAME','administrator');
+
+
+function cp_og_menu(){
+  $items['node/%/editors'] = array(
+    'title' => t('Cruise Plan Editors'),
+    'title callback' => 'cp_og_editors_title',
+    'title arguments' => array(1),
+    'type' => MENU_CALLBACK,
+    'page callback' => 'cp_og_editors_page',
+    'page arguments' => array(1),
+    'access callback' => 'cp_utils_is_cruise_admin',
+    'access arguments' => array(1),
+  );
+  $items['node/%/editors/%'] = array(
+    'title' => t('Cruise Plan Editors'),
+    'title callback' => 'cp_og_editors_title',
+    'title arguments' => array(1,3),
+    'type' => MENU_CALLBACK,
+    'page callback' => 'cp_og_editors_page',
+    'page arguments' => array(1,3),
+    'access callback' => 'cp_og_editors_access',
+    'access arguments' => array(1,3),
+  );
+  
+  return $items;
+}
+/****
+* Make the Groups tab with different text
+****/
+function cp_og_menu_alter(&$items){
+  $items['node/%/group']['title'] = 'Editors';
+  $items['node/%/group']['type'] = MENU_CALLBACK;
+}
+
+/****
+* Make the default accessibility of all groups (Cruises) = Private
+****/
+function cp_og_og_fields_info_alter(&$items){
+    $items[OG_ACCESS_FIELD]['instance']['default_value'][0]['value'] = variable_get('cp_og_settings', 0);
+}
+
+function cp_og_form_og_ui_admin_settings_alter(&$form){
+  $allowed_values = array(
+    0 => 'Public - accessible to all site users',
+    1 =>  'Private - accessible only to group members',
+  );
+  $form['cp_og_settings'] = array(
+    '#label' => t('Group visibility'),
+    '#description'=> t('This determines the default group visibility settings for all groups'),
+    '#required' => TRUE,
+    // Default to public.
+    '#default_value' => variable_get('cp_og_settings', 0),
+    '#type' => 'radios',
+    '#options' => $allowed_values,
+  );
+}
+
+function _cp_og_is_cruise_planning_og_form($form_id){
+  static $forms;
+
+  if( empty($forms) ) {
+    $forms = array(
+      'cruise_plan_node_form',
+      'cruise_funding_node_form',
+      'cruise_party_node_form',
+      'cruise_station_node_form',
+    );
+  }
+  return in_array($form_id, $forms);
+}
+
+
+function cp_og_add_cruise($node){
+  global $user;
+  
+  $og_mem = og_group('node', $node->nid, array(
+    'entity type' => 'user',
+    'entity' => $user,
+  ));  
+  
+  $granted = FALSE;
+  $name = 'og_group_manager_default_rids_node_cruise';
+  if ($rids = variable_get($name)) {
+    
+    foreach($rids as $rid){
+      og_role_grant('node', $node->nid, $og_mem->etid, $rid);
+      $granted = TRUE;
+    }
+  }
+  if( !$granted ){
+    $roles = og_roles('node', $node->nid, 'cruise');
+    if( $roles && !empty($roles) ){
+      foreach($roles as $rid => $role_name){
+        if( $role_name == OG_ADMINISTRATOR_ROLE_NAME ){
+          og_role_grant('node', $node->nid, $og_mem->etid, $rid);
+          return;
+        }
+      }
+    }
+  }
+}
+
+
+function cp_og_get_cruise_for_content($node){
+  if( empty($node) ){
+    return FALSE;
+  }
+  
+  if( $node->type == 'cruise' ){
+    return $node;
+  }
+  
+  $contents = og_get_entity_groups('node', $node);
+  if( empty($contents) || !array_key_exists('node', $contents)){
+    return FALSE;
+  }
+  
+  $cruise = array_shift($contents['node']);
+  return node_load($cruise);
+  
+}
+
+function cp_og_editors_title($cruiseID, $username = NULL){
+  if( $cruiseID ){
+    $cruise = node_load($cruiseID);
+    $title = '';
+    if( $cruise ){
+      $title = $cruise->title;
+    }
+    if( $username ){
+      $title .=': '.$username;
+    } else {
+      $title .= ': Add New Editor';
+    }
+    return $title;
+  }
+  
+  return 'New Cruise Editor';
+}
+
+function cp_og_editors_access($cruise, $username){
+
+  //do not allow editing of a non-member
+  if( !og_is_member('node', $cruise, 'user', user_load_by_name($username))){
+    return FALSE;
+  }
+  return cp_utils_is_cruise_admin($cruise);
+}
+
+function cp_og_editors_page($cruise, $username = NULL){
+  return drupal_get_form('cp_og_editors_form', $cruise, $username);
+}
+
+function cp_og_editors_form($form, &$form_state, $cruise, $username = NULL) {
+  global $user;
+
+  //do not allow users to edit their own information
+  $allowed = $user->name != $username;
+  
+  if( $allowed ){
+    
+    $form['cruise'] = array(
+      '#type' => 'hidden',
+      '#value'=> $cruise,
+      '#required' => TRUE,
+    );
+
+    $found_user = FALSE;
+    if( !$username && !empty($form_state['values']['username']) ){
+      $username = $form_state['values']['username'];
+    }
+
+    $current_roles = array();
+    
+    if( $username ){
+      $account = user_load_by_name($username);
+      if( $account ){
+        $found_user = TRUE;
+
+        $form['username'] = array(
+          '#prefix' => t('User: <strong>'.$username.'</strong> ('.$account->mail.')'),
+          '#type' => 'hidden',
+          '#value'=> $username,
+          '#required' => TRUE,
+        );
+
+        $current_roles = og_get_user_roles('node', $cruise, $account->uid);
+      }
+    }
+    
+    if( !$found_user ){
+
+      $form['email'] = array(
+        '#title' => t('Email Address'),
+        '#type' => 'textfield',
+        '#description' => t('Send an invitation to join your cruise plan'),
+        '#autocomplete_path' => 'cp_utils/user/email/autocomplete',
+      );
+    }
+
+    $og_roles = og_roles('node', 0, 'cruise', FALSE, FALSE);
+    $form['roles'] = array(
+      '#type' => 'select',
+      '#title' => t('Roles'),
+      '#options' => $og_roles,
+      '#required' => TRUE,
+    );
+
+    if( !empty($current_roles) ){
+      $defaults = array();
+      foreach($current_roles as $rid => $rname){
+        $defaults[] = $rid;
+      }
+      $form['roles']['#default_value'] = $defaults;
+    }
+
+    $submit_text = $found_user ? 'Update' : 'Add';
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => $submit_text,
+      '#submit' => array('cp_og_editors_submit'),
+      '#validate' => array('cp_og_editors_validate'),
+    );
+    if( $found_user ){
+      $form['remove'] = array(
+        '#type' => 'submit',
+        '#value' => 'Remove User',
+        '#submit' => array('cp_og_editors_remove_submit'),
+        '#validate' => array('cp_og_editors_remove_validate'),
+      );
+    }
+
+    
+  } else {
+    $membership = og_get_membership('node', $cruise, 'user', $user->uid);
+    if( $membership ){
+      $desc = '<p>You cannot edit your own information.</p><p><strong>User:</strong> '.$user->name.' ('.$user->mail.')<br/>';
+
+      $current_roles = og_get_user_roles('node', $cruise, $user->uid);
+      if( $current_roles ){
+        $desc .= '<strong>Role: </strong> ';
+        foreach($current_roles as $rname){
+          if( $rname != OG_AUTHENTICATED_ROLE ){
+            $desc .= $rname .' ';
+          }
+        }
+      }
+      $form['user'] = array(
+        '#type' => 'fieldset',
+        '#title' => 'User Information',
+        '#description' => t($desc),
+        '#tree' => TRUE,
+      );
+    }
+  }
+  
+  $form['actions']['cancel'] = array(
+    '#markup' => l(t('Back to Invitations'), 'node/'.$cruise.'/invitations'),
+  );
+    
+  return $form;
+}
+
+function cp_og_editors_validate($form, &$form_state) {
+
+  if( empty($form_state['values']['cruise']) ) {
+    form_set_error('cruise', t('A cruise plan has not been selected.'));
+  }
+  
+  $loaded_cruise = node_load($form_state['values']['cruise']);
+  if( empty($loaded_cruise) ){
+    form_set_error('cruise', t('A cruise plan has not been selected.'));
+  }
+  
+  $form_state['cp_og'] = array();
+  $form_state['cp_og']['cruise'] = $loaded_cruise;
+  
+  if( empty($form_state['values']['username']) ) {
+    
+    if( empty($form_state['values']['email'])){
+      form_set_error('email', t('Please specify an email address'));
+    } else if (!valid_email_address(t($form_state['values']['email']))) {
+      form_set_error('email', t('The email address appears to be invalid.'));
+    } else {
+      $account = user_load_by_mail(t($form_state['values']['email']));
+      
+      if( empty($account) && !module_exists('cp_invite') ){
+        form_set_error('email', 'This application does not allow external users to be invited to edit cruise plans.');
+      }
+      
+      if( !empty($account) && og_is_member('node', $form_state['values']['cruise'], 'user', $account)){
+        form_set_error('email', t('<strong>'.$form_state['values']['email'].'</strong> is already an editor of this cruise.'));
+      }
+    }
+    
+    $form_state['cp_og']['account'] = $account;
+    
+  } else {
+    //existing user check
+    $account = user_load_by_name($form_state['values']['username']);
+    if( !$account ){
+      form_set_error('username', t('Please specify a valid user'));
+    }
+    
+    $form_state['cp_og']['account'] = $account;
+  }
+  
+  if(empty($form_state['values']['roles']) ) {
+    form_set_error('roles', t('Please specify at least one role'));
+  }
+  
+  $roles = !is_array($form_state['values']['roles']) ? array($form_state['values']['roles']) : $form_state['values']['roles'];
+  foreach( $roles as $role_id){
+    if(!is_numeric($role_id) ){
+      form_set_error('roles', t('One or more of the roles are incorrect'));
+      break;
+    }
+  }
+  
+  $og_roles = cp_og_role_load($form_state['values']['roles']);
+  if( empty($og_roles) || count($og_roles) != count($form_state['values']['roles']) ){
+    form_set_error('roles', t('One or more of the roles cannot be found'));
+  }
+  $form_state['cp_og']['og_roles'] = $og_roles;
+}
+
+function cp_og_editors_submit($form, &$form_state) {
+  global $user;
+  
+  $cruise = $form_state['values']['cruise'];
+  $form_state['redirect'] = 'node/'.$cruise;
+  
+  if( $form_state['values']['username'] ){
+
+    $account = user_load_by_name($form_state['values']['username']);
+
+  } else {
+    
+    $mail = $form_state['values']['email'];
+    
+    $params = array(
+      'cruise' => $cruise,
+      'data' => $form_state['values'],
+      'cp_og' => $form_state['cp_og'],
+      'inviter' => $user,
+    );
+    
+    $account = user_load_by_mail($mail);
+    if( $account ) { 
+      $membership = og_get_membership('node', $cruise, 'user', $account->uid);
+      if( empty($membership) ){
+        
+        cp_og_invite($mail,$user->mail, $params);
+        drupal_set_message('An invitation has been sent to: <strong>'.$mail . '</strong>. They have been added to the cruise editors.');
+      } else {
+        
+        drupal_set_message('<strong>'. $mail. '</strong> is already an editor for this cruise: <strong>'. $account->name .'</strong>', 'error');
+      }
+      
+    } else if( module_exists('cp_invite') ){
+      
+      cp_invite_external_user($mail,$user->mail, $params);
+      return;
+    }
+  }
+  
+  if( !empty($account) ){
+    cp_og_update_user_cruise_roles($account, $cruise, $form_state['values']['roles']);
+  }
+}
+
+function cp_og_editors_remove_validate($form, &$form_state) {
+  if( empty($form_state['values']['cruise']) ) {
+    form_set_error('cruise', t('A cruise plan has not been selected.'));
+  }
+  if( empty($form_state['values']['username']) ) {
+    form_set_error('username', t('Please specify a user'));
+  }
+  $account = user_load_by_name($form_state['values']['username']);
+  if( !$account ){
+    form_set_error('username', t('Please specify a valid user'));
+  }
+}
+
+function cp_og_editors_remove_submit($form, &$form_state) {
+  $cruise = $form_state['values']['cruise'];
+  
+  $account = user_load_by_name($form_state['values']['username']);
+  $values = array(
+    'field_name' => OG_AUDIENCE_FIELD,
+    'entity' => $account,
+  );
+  $membership = og_group('node', $cruise, $values);
+
+  $existing_roles = og_get_user_roles('node', $cruise, $account->uid);
+  foreach($existing_roles as $rid => $role_name){
+    og_role_revoke('node', $cruise, $membership->etid, $rid);
+  }
+  
+  og_membership_delete($membership->id);
+  
+  if( module_exists('cp_invite') ){
+    cp_invite_delete_invitations($account);
+  }
+  
+  drupal_set_message('<strong>'. $account->name . '</strong> has been removed from this cruise plan.');
+  $form_state['redirect'] = 'node/'. $cruise;
+}
+
+function cp_og_update_user_cruise_roles($account, $cruise, $roles){
+
+  $values = array(
+    'field_name' => OG_AUDIENCE_FIELD,
+    'entity' => $account,
+  );
+
+  $membership = og_group('node', $cruise, $values);
+
+  //ROLES
+  $og_roles = og_get_user_roles('node', $cruise, $account->uid);
+
+  if(!is_array($roles)){
+    $roles = array($roles);
+  }
+  foreach($roles as $rid){
+    if( !empty($og_roles) && !array_key_exists($rid, $og_roles) ){
+      og_role_grant('node', $cruise, $membership->etid, $rid);
+    } else {
+      unset($og_roles[$rid]);
+    }
+  }
+
+
+  foreach($og_roles as $rid => $role_name){
+    if( $role_name != OG_AUTHENTICATED_ROLE ){
+      og_role_revoke('node', $cruise, $membership->etid, $rid);
+    }
+  }
+  
+  return $membership;
+}
+
+/**
+ * Fetch a OG roles from database.
+ *
+ * @param $rids
+ *   An integer with the role ID or an array of role IDs.
+ * @return
+ *   Either an array of, for a given array of role IDs, or an object of fully-loaded role objects if a role exists, FALSE otherwise.
+ */
+function cp_og_role_load($rids) {
+  if(!is_array($rids) ){
+    return og_role_load($rids);
+  }
+  
+  return db_select('og_role', 'r')
+    ->fields('r')
+    ->condition('rid', $rids, 'IN')
+    ->execute()
+    ->fetchAll();
+}
+
+function cp_og_invite($to, $from, $params = array()){
+  return drupal_mail('cp_og', 'invite', $to, language_default(), $params, $from, TRUE);
+}
+
+function cp_og_mail($key, &$message, $params) {
+  
+  $cruise = $params['cp_og']['cruise'];
+  $roles = $params['data']['roles'];
+  $inviter = $params['inviter'];
+  
+  switch ($key) {
+    case 'invite':
+      // note: data can be passed to this function in the $params array
+      $message['subject'] = t('['.cp_utils_get_site_name(). '] You have been invited to edit the cruise plan: ' . $cruise->title);
+      $message['body'][] = t(cp_utils_get_user_name($inviter) ." has invited you to edit this cruise.\n\n".cp_utils_get_cruise_info($cruise). "\n\nTo begin work on this cruise plan, go here : " . cp_utils_get_url() );
+      break; 
+  }
+}

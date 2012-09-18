@@ -1,0 +1,11 @@
+name = "Invitations for Cruise Editing"
+description = "Allows Cruise Admins to invite others outside the system to create Users & edit their cruise plans"
+core = 7.x
+package = "Cruise Planning"
+version = "7.x-1.0"
+
+dependencies[] = cp_og
+dependencies[] = cp_utils
+
+files[] = cp_invite.module
+files[] = cp_invite.install

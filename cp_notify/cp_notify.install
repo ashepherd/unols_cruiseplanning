@@ -1,0 +1,56 @@
+<?php
+
+function cp_notify_schema(){
+
+  $schema['cp_notify'] = array(
+
+    'description' => 'The base table for external cruise plan invitations',
+    'fields' => array(
+
+      'id' => array(
+        'description' => 'The primary key for the notification prefs.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The {users}.uid for these cruise notification preferences',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'cruise' => array(
+        'description' => 'The cruise node id related to this users preferences',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'preferences' => array(
+        'description' => 'The value of the variable.',
+        'type' => 'blob',
+        'not null' => TRUE,
+        'size' => 'big',
+        'translatable' => TRUE,
+      ), //see the way variabel_set works @ http://api.drupal.org/api/drupal/includes%21bootstrap.inc/function/variable_set/7
+      'created' => array(
+        'description' => 'The Unix timestamp when the invite was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the node was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'prefs' => array('cruise','uid'),
+    ),
+  );
+
+  return $schema;
+}
+

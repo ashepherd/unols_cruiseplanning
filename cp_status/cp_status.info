@@ -1,0 +1,13 @@
+name = "Cruise Status"
+description = "Determines if the necessary rules for cruise status promotion have been satisfied"
+core = 7.x
+package = "Cruise Planning"
+version = "7.x-1.0"
+
+dependencies[] = cp_field_info
+dependencies[] = cp_og
+dependencies[] = cp_vocabs
+
+files[] = cp_status.install
+files[] = cp_status.css
+files[] = cp_status.module

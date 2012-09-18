@@ -1,0 +1,8 @@
+name = UNOLS & R2R Vocabularies 
+description = "UNOLS Ports, UNOLS Ships, R2R Countries, R2R Person"
+package = "Cruise Planning"
+core = 7.x
+version = "7.x-1.0"
+
+files[] = cp_vocabs.module
+files[] = cp_vocabs.css

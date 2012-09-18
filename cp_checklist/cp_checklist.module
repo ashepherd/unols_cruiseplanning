@@ -1,0 +1,324 @@
+<?php
+
+define('CP_CHECKLIST_STATUS_INCOMPLETE', 0);
+define('CP_CHECKLIST_STATUS_DONE', 1);
+
+function cp_checklist_menu() {
+  
+  $items['node/%node/checklist'] = array(
+    'title' => 'Checklist',
+    'type' => MENU_LOCAL_TASK,
+    'description' => t('View checklist for required fields and cruise milestones'),
+    'access callback' => 'cp_utils_cruise_plan_page_access',
+    'access arguments' => array(1),
+    'page callback' => 'cp_checklist_for_cruise',
+    'page arguments' => array(1),
+    'weight' => '50',
+  );
+  return $items;
+}
+
+function cp_checklist_for_cruise($cruise) {
+  
+  drupal_set_title( t('Checklist for ' . $cruise->title) );
+  
+  $header = array(
+    array(
+      'data' => t('Required Fields'),
+    ),
+    array(
+      'data' => t('Value'),
+    ),
+    array(
+      'data' => t('Missing?'),
+    ),
+  );
+
+  $required = cp_status_get_required_fields($cruise);
+  $rows = array();
+  
+  drupal_add_css(drupal_get_path('module', 'cp_checklist') . '/cp_checklist.css');
+  
+  $is_missing = FALSE;
+  
+  foreach ($required as $field) {
+    $rows[] = array(
+      'data' => array(
+        array('data' => l(t($field['name']), $field['link']), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'),
+        array('data' => t($field['value']), 'nowrap' => 'nowrap', 'valign' => 'top'),
+        array('data' => t($field['missing'] ? 'Yes' : 'No'), 'nowrap' => 'nowrap', 'valign' => 'top', 'class' => array($field['missing'] ? 'missing' : 'supplied'),), 
+      ),
+      
+    );
+    
+    if( $field['missing'] ){
+      $is_missing = TRUE;
+    }
+  }
+
+  $html = theme('table', 
+    array(
+      'header' => $header,
+      'rows' => $rows,
+      'empty' => t('No required Fields'),
+    )
+  );
+  
+  if( !$is_missing && cp_status_is_in_progress($cruise) ){
+    $view = views_get_view('cruise_status');
+    if( is_object($view) ) {
+      $view->set_arguments( array($cruise->nid) );
+      $view->init_display();
+      $view->pre_execute();
+      $view->execute();
+      $html .= $view->render('views_display');
+    }
+  }
+  
+  $milestones = cp_checklist_cruise_milestones($cruise);
+  if( $milestones ){
+    $html.= drupal_render($milestones);
+  }
+
+  return $html;
+}
+
+function _cp_checklist_menu_title($cruise) {
+  return $cruise->title . ' Checklist';
+}
+
+function _cp_checklist_is_cruise_user($cruise, $user = NULL) {
+  global $user;
+
+  //return og_is_member('node',$cruise_id,'user',$user, array(OG_STATE_ACTIVE));
+  $has_access = og_user_access_entity('update any cruise_plan content', 'node', $cruise->nid, $user);
+  $perms = user_access(PERMISSION_SUBMIT_CRUISE);
+  return $has_access || $perms;
+}
+
+
+
+function cp_checklist_cruise_milestones($cruise){
+  $form_state = array();
+  $form_state['cruise'] = $cruise;
+  $form_state['milestones'] = cp_checklist_get_all_milestones();
+  $form = drupal_get_form('cp_checklist_cruise_milestones_form',$form_state);
+  return $form;
+}
+
+function cp_checklist_cruise_milestones_form($form, &$form_state){
+
+  $cruise = $form_state['build_info']['args']['0']['cruise'];
+  $milestones = $form_state['build_info']['args']['0']['milestones'];
+
+  $departure_date = cp_utils_get_departure_date($cruise);
+  $departure_diff = FALSE;
+  if( $departure_date ){
+    $diff = $departure_date - time();
+    $departure_diff = floor($diff/(60*60*24));
+  }
+  
+  $items = cp_checklist_search($cruise);
+  
+  $total = 0;
+  $rows = array();
+  foreach($milestones as $milestone){
+    $total += 1;
+
+    $is_done = FALSE;
+    $checked_item = $items[$milestone->nid];
+    if( $checked_item ){
+      $is_done = $checked_item->status == CP_CHECKLIST_STATUS_DONE;
+      $items[$milestone->nid] = $is_done;
+    }
+    
+    $desc = '';
+    if( !empty($milestone->field_field_milestone_description) ){
+      $desc = $milestone->field_field_milestone_description['0']['rendered']['#markup'];
+    }
+    if( !empty($milestone->field_field_website) ){
+      $desc.= '</br>' . $milestone->field_field_website['0']['rendered']['#markup'];
+    }
+    
+    $days = $milestone->field_field_days_from_departure['0']['raw']['value'];
+    $is_late = $departure_diff && ((int)$days > (int)$departure_diff);
+    
+    $row_class = '';
+    if( $is_late && !$is_done ){
+      $row_class = 'missing';
+    } else if( $is_done ){
+      $row_class = 'supplied';
+    }
+    
+    $rows[$milestone->nid] = array(
+      
+      'item' => array('data' => t($milestone->node_title), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      'desc' => array('data' => t($desc), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      'days' => array(
+        'data' => t($milestone->field_field_days_from_departure['0']['rendered']['#markup']), 
+        'nowrap' => 'nowrap', 
+        'valign' => 'top', 
+        'class' => array($row_class),
+      ),
+    );
+  }
+  
+  if( $total > 0 ){
+    $form['milestones'] = array(
+      '#type' => 'tableselect',
+      '#header' => _cp_checklist_form_headers(),
+      '#options' => $rows,
+      '#empty' => t('No milestones'),
+      '#multiple' => TRUE,
+      '#default_value' => $items,
+      '#attributes' => array('valign' => 'top', 'nowrap' => 'nowrap'),
+      '#prefix' => t('<h2>To-Do Checklist</h2>Mark checkboxes next to items that have been completed.<br/><strong>Days from Departure: '.($departure_diff ? $departure_diff.' days' : 'unknown').'</strong>'),
+      //'#suffix' => t('<p>['.l(t('hide completed items'), 'node/'.$cruise->nid.'/checklist?hide=incomplete').']</p>'),
+    );
+    
+    //if( cp_utils_is_cruise_admin($cruise) ){
+      $form['submit'] = array(
+        '#type' => 'submit',
+        '#value' => 'Update',
+        '#validate' => array('cp_checklist_milestone_validate'),
+        '#submit' => array('cp_checklist_milestone_submit'),
+      );
+    //}
+  }
+  
+  return $form;
+}
+
+function cp_checklist_milestone_validate($form, &$form_state){
+  global $user;
+  
+  $cruise = $form_state['build_info']['args']['0']['cruise'];
+  if(!cp_utils_is_cruise_admin($cruise)){
+    form_set_error('milestones','You must be an administrator of this cruise to update the checklist.' );
+  }
+}
+
+function cp_checklist_milestone_submit($form, &$form_state){
+  global $user;
+  
+  $cruise = $form_state['build_info']['args']['0']['cruise'];
+  $items = cp_checklist_search($cruise);
+  
+  $milestones = $form_state['values']['milestones'];
+  
+  foreach($milestones as $milestone => $check){
+    
+    $item = new stdClass();
+    $done = $milestone == $check;
+    
+    if( array_key_exists($milestone,$items) ){
+      
+      $item = $items[$milestone];
+      $item->changed = time();
+      $item->uid = $user->uid;
+      $item->status = $done ? CP_CHECKLIST_STATUS_DONE : CP_CHECKLIST_STATUS_INCOMPLETE;
+      cp_checklist_save($item);
+      
+    } else if( $done ){
+      
+      $item->uid = $user->uid;
+      $item->milestone = $milestone;
+      $item->cruise = $cruise->nid;
+      $item->created = time();
+      $item->changed = $item->created;
+      $item->status = CP_CHECKLIST_STATUS_DONE;
+      
+      cp_checklist_save($item);
+    }
+  }
+  
+  $items = cp_checklist_search($cruise);
+}
+
+function _cp_checklist_form_headers(){
+  $header = array(
+    'item' => array(
+      'data' => t('Item'),
+      'nowrap' => 'nowrap',
+    ),
+    'desc' => array(
+      'data' => t('Details'),
+      'nowrap' => 'nowrap',
+    ),
+    'days' => array(
+      'data' => t('Days from Departure'),
+      'nowrap' => 'nowrap',
+    ),
+  );
+  
+  return $header;
+}
+
+function cp_checklist_get_all_milestones(){
+  $view = views_get_view('milestones');
+  if (is_object($view)) {
+    $view->init_display();
+    $view->pre_execute();
+    $view->execute();
+    return $view->result;
+  }
+  return FALSE;
+}
+
+function cp_checklist_search($cruise, array $options = NULL){
+  if(!is_numeric($cruise)){
+    $cruise = $cruise->nid;
+  }
+  $items = db_select('cp_checklist', 'c')->fields('c');
+    $items->condition('cruise', $cruise, '=');
+
+  
+  $days = $items->leftJoin('field_data_field_days_from_departure','d',"%alias.entity_id = c.milestone and %alias.entity_type = 'node' and %alias.bundle = 'milestone'");
+  $items->addField($days, 'field_days_from_departure_value', 'days');
+  
+  $items->orderBy('days', 'DESC');
+
+  return $items->execute()->fetchAllAssoc('milestone');
+}
+
+
+/***************************
+* Checklist Milstones Entity
+****************************/
+
+function cp_checklist_entity_info() {
+  $return = array(
+    'cp_checklist' => array(
+      'label' => t('Cruise Planning CHecklist Milestones'),
+      'base table' => 'cp_checklist',
+      'entity keys' => array(
+        'id' => 'id',
+      ),
+    ),
+  );
+  return $return;
+}
+
+function cp_checklist_save(&$edit) {
+  field_attach_presave('cp_checklist', $edit);
+  if(!empty($edit->id)) {
+    drupal_write_record('cp_checklist', $edit, 'id');
+    return $edit;
+  }
+  drupal_write_record('cp_checklist', $edit);
+  return $edit;
+}
+
+function cp_checklist_delete($checklist_id) {
+  db_delete('cp_checklist')
+    ->condition('id', $checklist_id)
+    ->execute();
+}
+
+function cp_checklist_load($checklist_id, $reset = FALSE) {
+  return cp_checklist_load_multiple(array($checklist_id), array(), $reset);
+}
+
+function cp_checklist_load_multiple($checklist_id = array(), $conditions = array(), $reset = FALSE) {
+  return entity_load('cp_checklist', $checklist_id, $conditions, $reset);
+}

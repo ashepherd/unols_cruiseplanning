@@ -1,0 +1,51 @@
+.missing {
+    background-color: #CC9999;
+}
+.missing.even {
+    background-color: #CC9999;
+}
+
+.missing.odd {
+    background-color: #CC9999;
+}
+
+.supplied {
+    background-color: #6C9;
+}
+.supplied.even {
+    background-color: #6C9;
+}
+
+.supplied.odd {
+    background-color: #6C9;
+}
+
+
+.cruise-view {
+  border: 1px solid;
+  border-color: black;
+  padding: 5px 10px;
+  background: #65a9d7;
+  color: #fff;
+  font-size: 14px;
+  font-family: Arial, serif;
+  text-decoration: none;
+  vertical-align: middle;
+  
+  background: -webkit-gradient(linear, left top, left bottom, from(#3e779d), to(#65a9d7));
+  background: -webkit-linear-gradient(top, #3e779d, #65a9d7);
+  background: -moz-linear-gradient(top, #3e779d, #65a9d7);
+  background: -ms-linear-gradient(top, #3e779d, #65a9d7);
+  background: -o-linear-gradient(top, #3e779d, #65a9d7);
+  -webkit-border-radius: 8px;
+  -moz-border-radius: 8px;
+  border-radius: 8px;
+  -webkit-box-shadow: rgba(0,0,0,1) 0 1px 0;
+  -moz-box-shadow: rgba(0,0,0,1) 0 1px 0;
+  box-shadow: rgba(0,0,0,1) 0 1px 0;
+  text-shadow: rgba(0,0,0,.4) 0 1px 0;
+}
+
+a:hover.cruise-view {
+  color: #fff;
+}

@@ -1,0 +1,10 @@
+name = "OG Modifications"
+description = "Modifies the Organic Groups default settings to fit Cruise planning"
+core = 7.x
+package = "Cruise Planning"
+version = "7.x-1.0"
+
+dependencies[] = og
+dependencies[] = cp_utils
+
+files[] = cp_og.module

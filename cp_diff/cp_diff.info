@@ -1,0 +1,9 @@
+name = "Revision Tracking"
+description = "Provides information about what was changed for a Cruise node"
+core = 7.x
+package = "Cruise Planning"
+version = "7.x-1.0"
+
+dependencies[] = diff
+
+files[]  = cp_diff.module

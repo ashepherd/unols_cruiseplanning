@@ -1,0 +1,1200 @@
+<?php
+
+define('SCHEDULE_URL', 'http://strs.unols.org/services/schedules.svc/json/GetSchedule?');
+define('SCHEDULE_SHIP_PARAM', 'ship_id');
+define('SCHEDULE_YEAR_PARAM', 'year');
+
+define('SCHEDULE_BYID_URL', 'http://strs.unols.org/services/schedules.svc/json/GetScheduleByID?');
+define('SCHEDULE_ID_PARAM', 'sched_id');
+
+define('SCHEDULE_DATE_OFFSET', 6); // '/Date('
+
+define('PERMISSION_IMPORT_STRS', 'import ship time request');
+
+define('STRS_TITLE','UNOLS Ship Time Requests');
+
+
+/*
+ * hook_permission()
+ * 
+ * setup the permission to import UNOLS STRS
+ */
+function cp_strs_permission() {
+  return array(
+    PERMISSION_IMPORT_STRS => array(
+      'title' => t('Import Ship Time Requests'),
+      'description' => t('Import Ship Time Requests made at UNOLS into new Cruise Plans'),
+    ),
+  );
+}
+
+function cp_strs_menu() {
+  $items['unols/schedule'] = array(
+    'title' => STRS_TITLE,
+    'type' => MENU_NORMAL_ITEM,
+    'description' => t('View Ship Time Requests made at UNOLS into new Cruise Plans'),
+    'access callback' => 'cp_strs_access',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cp_strs_schedule_form'),
+  );
+  $items['unols/schedule/%/%'] = array(
+    'title' => 'Ship Time Request',
+    'type' => MENU_NORMAL_ITEM,
+    'description' => t('View Ship Time Request'),
+    'access callback' => 'cp_strs_access',
+    'page callback' => 'cp_strs_schedule',
+    'page arguments' => array(2,3),
+  );
+  return $items;
+}
+
+/*
+ * cp_strs_access 
+ * 
+ * User permission function for access to the STRS system
+ */
+function cp_strs_access() {
+  return user_access(PERMISSION_IMPORT_STRS);
+}
+
+/*
+ * cp_strs_schedule_form
+ * 
+ * Displays the form asking for the required fields to make the UNOLS STRS JSON request @ SCHEDULE_URL
+ */
+function cp_strs_schedule_form($node, &$form_state) {
+  
+  $ship_terms = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_SHIPS)->vid,0,NULL,TRUE);
+  $ships = array();
+  foreach($ship_terms as $ship){
+    $ships[$ship->field_unols_id['und']['0']['value']] = $ship->name;
+  }
+  
+  $form['ship'] = array(
+    '#type' => 'select',
+    '#title' => t('Ship'),
+    '#options' => $ships,
+    '#required' => TRUE,
+  );
+  $form['year'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Year'),
+    '#default_value' => date("Y"),
+    '#size' => '4',
+    '#maxlength' => '4',
+    '#required' => TRUE,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Search',
+  );
+  $form['#validate'][] = 'cp_strs_schedule_validate';
+  $form['#submit'][] = 'cp_strs_schedule_form_submit';
+
+  $submitted = $form_state['rebuild'] == TRUE;
+  if ($submitted){ 
+    if(isset($_SESSION['cp_strs_data'])) {
+      $cruises = $_SESSION['cp_strs_data'];
+      $title = t( _cp_strs_schedule_title($cruises) );
+      drupal_set_title( $title );
+      drupal_set_breadcrumb(array(
+        l(t('Home'), NULL), 
+        t($title),
+      ));
+      $form['table'] = array(
+        '#markup' => _cp_strs_table($cruises),
+      );
+      //unsetting the variable here breaks sorting table
+      //unset($_SESSION['cp_strs_data']);
+    } else {
+      $form['table'] = array(
+        '#markup' => '<br/><br/><h3>No results found.</h3>',
+      );
+    }
+  }
+  return $form;
+}
+
+/*
+ * cp_strs_schedule_validate
+ * 
+ * Validate the required fields for cp_strs_schedule_form() for the UNOLS STRS json request
+ */
+function cp_strs_schedule_validate($form, &$form_state) {
+  //check if ship ID is in the UNOLS Ship taxonomy
+  if (!is_numeric($form_state['values']['ship'])) {
+    form_set_error('year', t('Please specify a valid Ship'));
+  }
+  if (!is_numeric($form_state['values']['year'])) {
+    form_set_error('year', t('Please specify a valid Year'));
+  }
+}
+
+
+/*
+ * cp_strs_schedule_form_submit
+ * 
+ * Make the UNOLS STRS json request and store the results in a session variable
+ * 
+ * NOTE: this could probably be stored in 'cache' since the schedule is made final at some point.
+ * You could compare cache to request and if different, update cache. Cache could then be used for everyone
+ */
+function cp_strs_schedule_form_submit($form, &$form_state) {
+  $_SESSION['cp_strs_data'] = _cp_strs_get_cruises_for_year_and_ship($form['year']['#value'], $form['ship']['#value']);
+  $form_state['rebuild'] = TRUE;
+}
+
+/*
+ * cp_strs_schedule
+ * 
+ * Page displaying a UNOLS cruise schedule with a form to import the cruise
+ */
+function cp_strs_schedule($scheduleID, $cruiseID){
+  
+  $cruises = _cp_strs_get_cruises_for_schedule($scheduleID);
+  foreach($cruises['Cruises'] as $cruise){
+    if( $cruise['ID'] == $cruiseID){
+      
+      $title = 'Ship Time Request #' . $cruiseID;
+      drupal_set_title(t($cruises['Year'] . ' ' . $cruises['Ship'] . ': ' . $title) );
+      //*
+      drupal_set_breadcrumb(array(
+        l(t('Home'), NULL), 
+        l(t( _cp_strs_schedule_title($cruises) ), 'unols/schedule'),
+        t( $title ),
+      )); 
+      
+      $form = drupal_render(drupal_get_form('cp_strs_import_form', $scheduleID, $cruiseID, $cruise, $cruises));
+      return $form . _cp_strs_cruise_table($cruise);
+    }
+  }  
+}
+
+/*
+ * cp_strs_import_form
+ * 
+ * Renders a form to import a cruise from UNOLS STRS
+ */
+function cp_strs_import_form($form, &$form_state, $scheduleID, $cruiseID, $cruise, $schedule){
+    
+  $form['scheduleID'] = array(
+    '#type' => 'hidden',
+    '#value' => $scheduleID,
+    '#required' => TRUE,
+  );
+  $form['cruiseID'] = array(
+    '#type' => 'hidden',
+    '#value' => $cruiseID,
+    '#required' => TRUE,
+  );
+
+  $ship = cp_utils_ship_by_unols_id($schedule['ShipID']);
+  if( $ship ){
+    $form['ship'] = array(
+      '#type' => 'hidden',
+      '#value' => key($ship),
+      '#required' => TRUE,
+    );
+  }
+  
+  $form['cruise_title'] = array(
+    '#type' => 'textfield',
+    '#size' => 50,
+    '#maxlength' => 255,
+    '#title' => themed_translate('<strong>','</strong>','Cruise Title'),
+    '#default_value' => _cp_strs_get_cruise_title($cruise, $schedule),
+  );
+  
+  $options = cp_utils_ports_dropdown();
+  
+  $form['start_port'] = array(
+    '#type' => 'select',
+    '#title' => t('Starting Port'),
+    '#required' => FALSE,
+    '#options' => $options,
+  );
+  $port = cp_utils_port_by_unols_id($cruise['StartPortID']);
+  if( $port ){
+    $form['start_port']['#default_value'] = key($port);
+  } else {
+    $ports = _cp_strs_lookup_port($cruise['StartPortNameAndLocation']);
+    if(array_key_exists('default', $ports) ){
+      $form['start_port']['#default_value'] = $ports['default'];
+    }
+  }
+  
+  
+  $form['end_port'] = array(
+    '#type' => 'select',
+    '#title' => t('Ending Port'),
+    '#required' => FALSE,
+    '#options' => $options,
+  );
+  $port = cp_utils_port_by_unols_id($cruise['EndPortID']);
+  if( $port ){
+    $form['end_port']['#default_value'] = key($port);
+  } else {
+    $ports = _cp_strs_lookup_port($cruise['EndPortNameAndLocation']);
+    if(array_key_exists('default', $ports) ){
+      $form['end_port']['#default_value'] = $ports['default'];
+    }
+  }
+  
+  $members = array();
+  if( !empty($cruise['ChiefScientist']) ){
+    $members[] = array(
+      'type' => 'Chief Scientist',
+      'name' => _cp_strs_get_person_name($cruise['ChiefScientist']),
+      'ID' => $cruise['ChiefScientist']['ID'],
+      'inst' => $cruise['ChiefScientist']['InstitutionAbbr'],
+    );
+  }
+  
+  $sci_objective = '';
+  
+  foreach($cruise['CruiseAgencies'] as $agency){
+    if( !empty($agency['AssociatedMember']) ){    
+      $members[] = array(
+        'type' => 'PI',
+        'name' => _cp_strs_get_person_name($agency['AssociatedMember']),
+        'ID' => $agency['AssociatedMember']['ID'],
+        'inst' => $agency['AssociatedMember']['InstitutionAbbr'],
+      );
+    }
+  }
+  
+  $options = cp_strs_orgs_dropdown();
+  
+  foreach($members as $member){
+    if(!array_key_exists($member['ID'], $form)){
+      $form[$member['ID']] = array(
+        '#type' => 'select',
+        '#title' => t('Institution for '.$member['type'].': '.$member['name'] ),
+        '#required' => FALSE,
+        '#options' => $options,
+      );
+    
+      $inst = cp_strs_inst_by_abbr($member['inst']);
+      if( $inst ){
+        $form[$member['ID']]['#default_value'] = $inst;
+      }
+    }
+  }
+  
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Import',
+  );
+  $form['#validate'][] = 'cp_strs_import_validate';
+  $form['#submit'][] = 'cp_strs_import_form_submit';
+
+  return $form;
+}
+
+/*
+ * cp_strs_orgs_dropdown()
+ * 
+ * Return a list of Organizations
+ * 
+ */
+function cp_strs_orgs_dropdown(){
+  $dropdown_source = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_ORG)->vid,0,NULL,TRUE);
+  $dropdown_array = array('0' => '--none--');
+  foreach ($dropdown_source as $item) {
+    $value = $item->name;
+    if( $item->field_abbreviation ){
+      $value .= ' (' . $item->field_abbreviation['und']['0']['value'] . ')';
+    }
+    $dropdown_array[$item->tid] = $value;
+  }
+  return $dropdown_array;
+}
+
+/*
+ * cp_strs_inst_by_abbr()
+ * 
+ * Return the taxonomy term for a given organization's abbreviation
+ */
+function cp_strs_inst_by_abbr($abbrev){
+  $query = db_select('field_data_field_abbreviation', 'a');
+  $result = $query
+    ->fields('a',array('entity_id'))
+    ->condition('a.entity_type', 'taxonomy_term')
+    ->condition('a.bundle', TAXONOMY_ORG)
+    ->condition('a.field_abbreviation_value', $abbrev, '=')
+    ->execute();
+  if(count($result) == 1 ){
+    foreach ($result as $item) {
+      return $item->entity_id;
+    }
+  }
+  
+  return FALSE;
+}
+
+/*
+ * cp_strs_import_validate
+ * 
+ * Mkae sure the UNOLS schedule ID & cruise ID are proper
+ */
+function cp_strs_import_validate($form, &$form_state) {
+  
+  if (!is_numeric($form_state['values']['scheduleID'])) {
+    form_set_error('scheduleID', t('Please specify a UNOLS Schedule ID'));
+  }
+  if (!is_numeric($form_state['values']['cruiseID'])) {
+    form_set_error('cruiseID', t('Please specify a UNOLS Ship Time Request ID'));
+  }
+}
+
+/*
+ * cp_strs_import_form_submit
+ * 
+ * If the cruise ID returns valid data from UNOLS STRS @ SCHEDULE_BYID_URL, save the data as a cruise
+ */
+function cp_strs_import_form_submit($form, &$form_state) {
+
+  $cruise = _cp_strs_get_cruise_data($form['scheduleID']['#value'], $form['cruiseID']['#value']);
+  if( $cruise ){
+      _cp_strs_save_cruise($cruise, $form_state['values']);
+  } else { 
+    drupal_set_message( t('Could not find the cruise for the scheduleID: ' . $form['scheduleID']['#value']) ,'error');
+  }
+}
+
+/*
+ * _cp_strs_get_cruise_data
+ * 
+ * Returns an array of cruise data for the given UNOLS STRS schedule ID and cruise ID
+ */
+function _cp_strs_get_cruise_data($scheduleID, $cruiseID){
+  $cruises = _cp_strs_get_cruises_for_schedule($scheduleID);
+  foreach($cruises['Cruises'] as $cruise){
+    if( $cruise['ID'] == $cruiseID){
+      return $cruise;
+    }
+  }
+  return FALSE;
+}
+
+/*
+ * _cp_strs_get_cruises_for_year_and_ship
+ * 
+ * make JSON request for a given ship & year
+ */
+function _cp_strs_get_cruises_for_year_and_ship($year, $ship){
+  
+  $request = drupal_http_request(
+      SCHEDULE_URL . SCHEDULE_SHIP_PARAM . '=' . $ship . '&' . SCHEDULE_YEAR_PARAM . '=' . $year, 
+      array('headers' => array("content-type" => "application/json"))
+  );
+
+  if (isset($request->error) ) {
+    if($request->code != '400'){
+      drupal_set_message($request->error, 'error');
+    }
+    return;
+  }
+  
+  return drupal_json_decode($request->data);
+}
+
+/*
+ * _cp_strs_get_cruises_for_schedule
+ * 
+ * make JSON request for a given schedule ID
+ */
+function _cp_strs_get_cruises_for_schedule($scheduleID){
+  $request = drupal_http_request(
+      SCHEDULE_BYID_URL . SCHEDULE_ID_PARAM . '=' . $scheduleID, 
+      array('headers' => array("content-type" => "application/json"))
+  );
+
+  if (isset($request->error) ) {
+    if($request->code != '400'){
+      drupal_set_message($request->error, 'error');
+    }
+    return;
+  }
+
+  $data = drupal_json_decode($request->data);
+  return $data;
+}
+
+/*
+ * _cp_strs_save_cruise
+ * 
+ * save all the cruise data as drupal nodes using drupal_form_submit()
+ * drupal_form_submit() allows any other triggers to fire when cruise content is created
+ */
+function _cp_strs_save_cruise($strs, $values){
+  
+  /* the call to use the migrate module */
+  //_cp_strs_migrate($cruise, $form_state['values']);
+  
+  global $user;
+  if ( !$user->uid ) {
+    drupal_set_message('You must be logged in to import ship time requests', 'error');
+    return;
+  }
+
+  module_load_include('inc', 'node', 'node.pages');
+  
+  $cruise = new stdClass();
+  // the machine name of the OG group you created. /
+  $cruise->type = 'cruise';
+  $cruise->language= LANGUAGE_NONE;
+  $cruise->options = array();
+  $cruise->uid = $user->uid;
+  $cruise->name = $user->name;
+  $cruise->promote = 0;
+  $cruise->module = 'node';
+  node_object_prepare($cruise);
+  
+  $form_state = array();  
+  $form_state['values']['op'] = t('Save');
+  $form_state['values']['revision'] = 1;
+  $form_state['values']['status'] = 1;
+  $form_state['values']['language'] = LANGUAGE_NONE;
+
+  //OG
+  $form_state['values']['group_group'][LANGUAGE_NONE] = 1;
+  
+  $form_state['values']['title'] = $values['cruise_title'];
+  $form_state['values']['field_ship'][LANGUAGE_NONE] = (string)$values['ship'];
+  
+  $form_state['values']['field_unols_schedule_id'][LANGUAGE_NONE]['0']['value'] = (string)$values['cruiseID'];
+  
+  if( !empty($strs['Webpage']) ){
+    $form_state['values']['field_cruise_website'][LANGUAGE_NONE]['0']['url'] = (string)$strs['Webpage'];
+  }
+  if( !empty($strs['CruiseType']) ){
+    $form_state['values']['field_cruise_notes'][LANGUAGE_NONE]['0']['value'] = (string)$strs['CruiseType'];
+  }
+    
+  drupal_form_submit('cruise_node_form', $form_state, $cruise);
+  
+  $cruise_plan = new stdClass();
+  $cruise_plan->type = 'cruise_plan';
+  $cruise_plan->language= LANGUAGE_NONE;
+  $cruise_plan->options = array();
+  $cruise_plan->uid = $user->uid;
+  $cruise_plan->name = $user->name;
+  $cruise_plan->promote = 0;
+  $cruise_plan->module = 'node';
+  node_object_prepare($cruise_plan);
+  
+  $form_state = array();  
+  $form_state['values']['op'] = t('Save');
+  $form_state['values']['revision'] = 1;
+  $form_state['values']['status'] = 1;
+  $form_state['values']['language'] = LANGUAGE_NONE;
+
+  //OG
+  $form_state['values'][OG_AUDIENCE_FIELD][LANGUAGE_NONE]['0'] = $cruise->nid;
+  
+  //PORTS
+  if( $values['start_port'] ){
+    $form_state['values']['field_departure_port'][LANGUAGE_NONE] = (string)$values['start_port'];
+  }
+  if( $values['end_port']){
+    $form_state['values']['field_arrival_port'][LANGUAGE_NONE] = (string)$values['end_port'];
+  }
+  
+  if( !empty($strs['CoastalStates']) ){
+    $form_state['values']['field_coastal_states'][LANGUAGE_NONE]['0']['value'] = (string)$strs['CoastalStates'];
+  }
+  
+  if( !empty($strs['ScienceDays']) ){
+    $form_state['values']['field_science_days_num'][LANGUAGE_NONE]['0']['value'] = (string)$strs['ScienceDays'];
+  }
+  
+  if( !empty($strs['OpAreaDescription']) ){
+    $form_state['values']['field_general_ops_area'][LANGUAGE_NONE]['0']['value'] = (string)$strs['OpAreaDescription'];
+  }
+  
+  if( !empty($strs['AncilFacilities']) ){
+    $form_state['values']['field_ancil_facilities'][LANGUAGE_NONE]['0']['value'] = (string)$strs['AncilFacilities'];
+  }
+  
+  if( !empty($strs['StartDate']) ){
+    $form_state['values']['field_departure_date'][LANGUAGE_NONE]['0']['value']['date'] = (string)_cp_strs_get_date($strs['StartDate'], FALSE, TRUE);
+  }
+  if( !empty($strs['EndDate']) ){
+    $form_state['values']['field_arrival_date'][LANGUAGE_NONE]['0']['value']['date'] = (string)_cp_strs_get_date($strs['EndDate'], FALSE, TRUE);
+  }
+  
+  if( !empty($strs['MobDate']) ){
+    $form_state['values']['field_mob_date'][LANGUAGE_NONE]['0']['value']['date'] = (string)_cp_strs_get_date($strs['MobDate'], FALSE, TRUE);
+  }
+  if( !empty($strs['DemobDate']) ){
+    $form_state['values']['field_demob_date'][LANGUAGE_NONE]['0']['value']['date'] = (string)_cp_strs_get_date($strs['DemobDate'], FALSE, TRUE);
+  }
+  
+  //Latitude/Longitude
+  $HAS_BEGIN = FALSE;
+  $idx = 0;
+  if( !empty($strs['BeginLat']) ){
+    $form_state['values']['field_latitude'][LANGUAGE_NONE][strval($idx)]['lat'] = (string)$strs['BeginLat'];
+    $HAS_BEGIN= TRUE;
+  }
+  if( !empty($strs['BeginLon']) ){
+    $form_state['values']['field_latitude'][LANGUAGE_NONE][strval($idx)]['lng'] = (string)$strs['BeginLon'];
+    $HAS_BEGIN= TRUE;
+  }
+  if( !empty($strs['EndLat']) || !empty($strs['EndLon']) ){
+    $idx = $HAS_BEGIN ? 1 : $idx;
+    if( !empty($strs['EndLat']) ){
+      $form_state['values']['field_latitude'][LANGUAGE_NONE][strval($idx)]['lat'] = (string)$strs['EndLat'];
+    }
+    if( !empty($strs['EndLon']) ){
+      $form_state['values']['field_latitude'][LANGUAGE_NONE][strval($idx)]['lng'] = (string)$strs['EndLon'];
+    }
+  }
+  
+  //MARSDEN GRIDS
+  $idx = 0;
+  
+  if( !empty($strs['BeginMarsdenGrid']) ){
+    $form_state['values']['field_marsden_grids'][LANGUAGE_NONE][strval($idx)]['value'] = (string)$strs['BeginMarsdenGrid'];
+    $form_state['values']['field_marsden_grids'][LANGUAGE_NONE][strval($idx)]['_weight'] = (string)strval($idx);
+    $idx++;
+  }
+
+  if( !empty($strs['EndMarsdenGrid']) ){
+    $form_state['values']['field_marsden_grids'][LANGUAGE_NONE][strval($idx)]['value'] = (string)$strs['EndMarsdenGrid'];
+    $form_state['values']['field_marsden_grids'][LANGUAGE_NONE][strval($idx)]['_weight'] = (string)strval($idx);
+  }
+
+  //NAVY Ops Area
+  $idx = 0;
+  if( !empty($strs['BeginNavyOpArea']) ){
+    $form_state['values']['field_navy_op_areas'][LANGUAGE_NONE][strval($idx)]['value'] = (string)$strs['BeginNavyOpArea'];
+    $form_state['values']['field_navy_op_areas'][LANGUAGE_NONE][strval($idx)]['_weight'] = (string)strval($idx);
+    $idx++;
+  }
+
+  if( !empty($strs['EndNavyOpArea']) ){
+    $form_state['values']['field_navy_op_areas'][LANGUAGE_NONE][strval($idx)]['value'] = (string)$strs['EndNavyOpArea'];
+    $form_state['values']['field_navy_op_areas'][LANGUAGE_NONE][strval($idx)]['_weight'] = (string)strval($idx);
+  }
+  
+  $term_chief_sci = key(taxonomy_get_term_by_name(TERM_CHIEF_SCI, TAXONOMY_CRUISE_PARTY_ROLES));
+  $term_PI = key(taxonomy_get_term_by_name(TERM_PI, TAXONOMY_CRUISE_PARTY_ROLES));
+  
+  
+  $members = array();
+  if( !empty($strs['ChiefScientist']) ){
+    //get the role, attach to member
+    $party_member = new stdClass();
+    $party_member->info = $strs['ChiefScientist'];
+    $party_member->roles = array($term_chief_sci => $term_chief_sci);
+    $party_member->inst = (string)$values[$strs['ChiefScientist']['ID']];
+    $members[$strs['ChiefScientist']['ID']] = $party_member;
+  }
+  
+  $sci_objective = '';
+  
+  foreach($strs['CruiseAgencies'] as $agency){
+    //save each funding purpose to the science objective
+    if( !empty($agency['Purpose']) ){
+      if( !empty($sci_objective) ){
+        $sci_objective .=', ';
+      }
+      $sci_objective .= $agency['Purpose'];
+    }
+    
+    if( !empty($agency['AssociatedMember']) ){
+      $party_member = $members[$agency['AssociatedMember']['ID']];
+      if( empty($party_member) ){
+        $party_member = new stdClass();
+        $party_member->info = $agency['AssociatedMember'];
+        $party_member->roles = array($term_PI => $term_PI);
+        $party_member->inst = (string)$values[$agency['AssociatedMember']['ID']];
+      } else {
+        $party_member->roles[$term_PI] = $term_PI;
+      }      
+      $members[$agency['AssociatedMember']['ID']] = $party_member;
+    }
+    
+    _cp_strs_cruise_funding_create($cruise, $agency);
+  }
+  
+  if( !empty($sci_objective) ){
+    $form_state['values']['field_science_objective'][LANGUAGE_NONE]['0']['value'] = $sci_objective;
+  }
+  
+  drupal_form_submit('_cp_strs_cruise_plan_node_form', $form_state, $cruise_plan);
+  
+  foreach($members as $party_member){
+    _cp_strs_cruise_member_create($cruise, $party_member);
+  }
+  
+  
+  if ( !form_get_errors() ){
+    $msgs = drupal_get_messages('status',TRUE);
+    drupal_goto('node/'.$cruise->nid);
+  }
+}
+
+/*
+ * _cp_strs_cruise_member_create
+ * 
+ * Save any cruise party information for the cruise
+ */
+function _cp_strs_cruise_member_create($cruise, $member){
+  global $user;
+  $cruise_member = new stdClass();
+  $cruise_member->type = 'cruise_party_member';
+  $cruise_member->language= LANGUAGE_NONE;
+  $cruise_member->options = array();
+  $cruise_member->uid = $user->uid;
+  $cruise_member->name = $user->name;
+  $cruise_member->promote = 0;
+  $cruise_member->module = 'node';
+  node_object_prepare($cruise_member);
+  
+  $form_state = array();  
+  $form_state['values']['op'] = t('Save');
+  $form_state['values']['revision'] = 1;
+  $form_state['values']['status'] = 1;
+  $form_state['values']['language'] = LANGUAGE_NONE;
+
+  //OG
+  $form_state['values'][OG_AUDIENCE_FIELD][LANGUAGE_NONE]['0'] = $cruise->nid;
+  
+  $form_state['values']['field_cruise_party_member_name'][LANGUAGE_NONE]['0']['value'] = _cp_strs_get_person_name($member->info);
+  
+  if( $member->inst != '0' ){
+    $t = taxonomy_term_load($member->inst);
+    $form_state['values']['field_organization'][LANGUAGE_NONE] = $t->name;
+  }
+  
+  if( !empty($member->roles) ){
+    $form_state['values']['field_cruise_party_member_role'][LANGUAGE_NONE] = $member->roles;
+  }
+
+  if( !empty($member->info['ID']) ){
+    //UNOLS person ID
+    $form_state['values']['field_unols_id'][LANGUAGE_NONE]['0']['value'] = $member->info['ID'];
+  }
+  
+  drupal_form_submit('cruise_party_member_node_form', $form_state, $cruise_member);
+}
+
+/*
+ * _cp_strs_cruise_funding_create
+ * 
+ * Save any funding agency information for the cruise
+ */
+function _cp_strs_cruise_funding_create($cruise, $agency){
+  global $user;
+  $cruise_funding = new stdClass();
+  $cruise_funding->type = 'funding';
+  $cruise_funding->language= LANGUAGE_NONE;
+  $cruise_funding->options = array();
+  $cruise_funding->uid = $user->uid;
+  $cruise_funding->name = $user->name;
+  $cruise_funding->promote = 0;
+  $cruise_funding->module = 'node';
+  node_object_prepare($cruise_funding);
+  
+  $form_state = array();  
+  $form_state['values']['op'] = t('Save');
+  $form_state['values']['revision'] = 1;
+  $form_state['values']['status'] = 1;
+  $form_state['values']['language'] = LANGUAGE_NONE;
+
+  //OG
+  $form_state['values'][OG_AUDIENCE_FIELD][LANGUAGE_NONE]['0'] = $cruise->nid;
+  
+  //term reference expects just the string and if exists reuses, if not creates
+  $form_state['values']['field_funding_agency'][LANGUAGE_NONE] = $agency['FullAgencyAbbr'];
+  
+  if( !empty($agency['GrantNbr']) ){
+    $form_state['values']['field_award_number'][LANGUAGE_NONE]['0']['value'] = $agency['GrantNbr'];
+  }
+  
+  if( !empty($agency['ProjectID']) ){
+    $form_state['values']['field_inst_project_number'][LANGUAGE_NONE]['0']['value'] = $agency['ProjectID'];
+  }
+  
+  if( !empty($agency['ShipRequestID']) ){
+    $form_state['values']['field_ship_request_id'][LANGUAGE_NONE]['0']['value'] = $agency['ShipRequestID'];
+  }
+  
+  drupal_form_submit('funding_node_form', $form_state, $cruise_funding);
+}
+
+/*
+ * _cp_strs_cruise_plan_node_form
+ * 
+ * Called by _cp_strs_save_cruise() to submit a cruise_plan_node_form
+ * 
+ * We coulnd't just call drupal_form_submit becuase the $form needed to be rebuilt
+ * based on the number of items being submitted as multiple values. Currently this
+ * is for the fields: lat/lon, marsden grids, & navy ops area
+ */
+function _cp_strs_cruise_plan_node_form($node, &$form_state, $cruise_plan){
+  $form = drupal_retrieve_form('cruise_plan_node_form', $form_state);
+  
+  //increment items_count
+  $multi_value_fields = array(
+    'field_latitude',
+    'field_marsden_grids',
+    'field_navy_op_areas',
+  );
+  foreach($multi_value_fields as $field_name){
+    _cp_strs_set_number_of_values($field_name, $form_state);
+  }
+     
+  $form = drupal_rebuild_form('cruise_plan_node_form', $form_state, $form);
+  return $form;
+}
+
+/*
+ * _cp_strs_set_number_of_values
+ * 
+ * Called by _cp_strs_cruise_plan_node_form() to set the number of items being submitted for a field
+ */
+function _cp_strs_set_number_of_values($field_name, &$form_state){
+  if( array_key_exists($field_name, $form_state['values']) ){
+    $count = count($form_state['values'][$field_name][LANGUAGE_NONE]);
+    $form_state['field'][$field_name]['und']['items_count'] = $count;
+  }
+}
+
+/*
+ *  cp_strs_list_scheduled_cruises
+ * 
+ *  Returns a list of cruises that have a UNOLS schedule ID
+ */
+function cp_strs_list_scheduled_cruises(){
+
+  $results = db_query("select entity_id as nid, field_unols_schedule_id_value as schedule_id from field_data_field_unols_schedule_id where entity_type = 'node' and bundle = 'cruise'");
+  $cruises = array();
+  foreach ($results as $cruise) {
+    $cruises[$cruise->schedule_id] = $cruise->nid;
+  }
+  return $cruises;
+}
+
+/*
+ * _cp_strs_get_cruise_title
+ * 
+ * Helper function to generate a cruise title for the importing node
+ */
+function _cp_strs_get_cruise_title($cruise, $schedule){
+  if( $cruise['OpAreaDescription'] ) return $cruise['OpAreaDescription'];
+  return $schedule['Year'].':'.$schedule['Ship'].' ('._cp_strs_get_chief_scientist($cruise, FALSE).')';
+}
+
+/*
+ * _cp_strs_lookup_port
+ * 
+ * Returns an array of taxonomy terms of 'ports' that might possibly match the given string $port_name
+ */
+function _cp_strs_lookup_port($port_name){
+  
+  $max = strlen($port_name) > 3 ? 3 : strlen($port_name); 
+  $name = explode(', ', $port_name);  
+  
+  $sub_name = substr($port_name, 0,$max);
+  $query = db_select('taxonomy_term_data', 't');
+  $result = $query
+    ->fields('t',array('name','tid'))
+    ->condition('t.vid', taxonomy_vocabulary_machine_name_load(TAXONOMY_PORTS)->vid)
+    ->condition('t.name', $sub_name.'%', 'LIKE')
+    ->orderBy('t.name')
+    ->execute();
+
+  $ports = array();
+  $ports['options'][''] = ' ** Leave blank ** ';
+  
+  $FOUND = FALSE;
+  foreach ($result as $item) {
+    $FOUND = TRUE;
+    if( in_array($item->name, $name) ){
+      $ports['default'] = $item->tid;
+    }
+    $ports['options'][$item->tid] = $item->name;
+  }
+  if( !$FOUND ){
+    return _cp_strs_lookup_port(substr($sub_name, 0, $max-1));
+  }
+  return $ports;
+}
+
+/*
+ * _cp_strs_table
+ * 
+ * Generate an HTML table to display cruises for a certain UNOLS schedule(Ship,Year) 
+ */
+function _cp_strs_table($data){
+  
+  $scheduled = cp_strs_list_scheduled_cruises();
+  
+  $cruises = $data['Cruises'];
+  if( isset($_REQUEST['sort']) ){
+    usort($cruises, '_cp_strs_schedule_sort'); 
+  }
+  
+  
+  $header = array(
+      array(
+        'data' => t('Schedule ID'),
+        'nowrap' => 'nowrap',
+      ),
+      array(
+        'data' => t('Imported?'),
+        'nowrap' => 'nowrap',
+      ),
+      array(
+        'data' => t('Type'),
+        'nowrap' => 'nowrap',
+      ),
+      array(
+        'data' => t('Dates'),
+        'field' => 'Dates',
+        'sort' => 'asc',
+        'nowrap' => 'nowrap',
+      ),
+      array(
+        'data' => t('Begin Port'),
+        'nowrap' => 'nowrap',
+      ),
+      array(
+        'data' => t('End Port'),
+        'nowrap' => 'nowrap',
+      ),
+      array(
+        'data' => t('Funding Agency'),
+        'nowrap' => 'nowrap',
+      ),
+      array(
+        'data' => t('Chief Scientist'),
+        'field' => 'ChiefScientist',
+        'sort' => 'asc',
+        'nowrap' => 'nowrap',
+      ),
+    );
+        
+    $total = 0;
+    $rows = array();
+    foreach($cruises as $cruise){
+      $total += 1;
+      $rows[] = array(
+        'data' => array(
+          array('data' => l( $cruise['ID'], 'unols/schedule/' . $data['ID'] . '/' . $cruise['ID'] ), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+          array('data' => array_key_exists($cruise['ID'], $scheduled) ? l('Yes','node/'.$scheduled[$cruise['ID']]) : '', 'nowrap' => 'nowrap', 'valign' => 'top'), 
+          array('data' => t($cruise['CruiseType']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+          array('data' => t(_cp_strs_get_date($cruise['StartDate']) . ' - ' . _cp_strs_get_date($cruise['EndDate'])), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+          array('data' => t($cruise['StartPortNameAndLocation']), 'valign' => 'top'), 
+          array('data' => t($cruise['EndPortNameAndLocation']), 'valign' => 'top'), 
+          array('data' => t(_cp_strs_get_funding($cruise)), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+          array('data' => t(_cp_strs_get_chief_scientist($cruise)), 'valign' => 'top'), 
+        )
+      );
+    }
+
+    $html = theme('table', array(
+      'header' => $header,
+      'rows' => $rows,
+      'caption' => t('Total: ' . $total),
+      'sticky' => TRUE,
+      'empty' => t('No results'),
+        )
+    );
+    
+    return $html;
+}
+
+/*
+ * _cp_strs_cruise_table
+ * 
+ * Generate an HTML table to display cruise information for a certain UNOLS cruise
+ */
+function _cp_strs_cruise_table($cruise){
+  $header = array(
+    array(
+      'data' => t('Field'),
+    ),
+    array(
+      'data' => t('Value'),
+    ),
+  );
+
+  $rows = array(
+    array(
+      'data' => array(
+        array('data' => t('Type of Cruise'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['CruiseType']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Chief Scientist'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t(_cp_strs_get_chief_scientist($cruise)), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Funding'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t(_cp_strs_get_funding($cruise)), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Start Date'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t(_cp_strs_get_date($cruise['StartDate'], TRUE)), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('End Date'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t(_cp_strs_get_date($cruise['EndDate'], TRUE)), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Start Port'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['StartPortNameAndLocation']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('End Port'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['EndPortNameAndLocation']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Mob Date'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t(_cp_strs_get_date($cruise['MobDate'], TRUE)), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Mob Days'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['MobDays']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Demob Date'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t(_cp_strs_get_date($cruise['DemobDate'], TRUE)), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Demob Days'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['DemobDays']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Dates Pending?'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['DatesPending'] ? 'Yes' : 'No'), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Days of Science'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['ScienceDays']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Day of Transit'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['TransitDays']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Operations Area'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['OpAreaDescription']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Coastal States'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['CoastalStates']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Anciliary Facilities'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['AncilFacilities']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Start Lat/Lon'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['BeginLat'] . ' , ' . $cruise['BeginLon']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Start Marsden Grid'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['BeginMarsdenGrid']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Start Navy Ops Area'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['BeginNavyOpArea']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('End Lat/Lon'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['EndLat'] . ' , ' . $cruise['EndLon']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('End Marsden Grid'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['EndMarsdenGrid']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('End Navy Ops Area'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['EndNavyOpArea']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+    array(
+      'data' => array(
+        array('data' => t('Webpage'), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'), 
+        array('data' => t($cruise['Webpage']), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      ),
+    ),
+  );
+   
+  $html = theme('table', array(
+      'header' => $header,
+      'rows' => $rows,
+      'empty' => t('No ship time request'),
+        )
+    );
+
+  return $html;
+}
+
+/*
+ * _cp_strs_get_chief_scientist
+ * 
+ * Helper function to represent the Chief Scientist as a string
+ */
+function _cp_strs_get_chief_scientist($cruise, $include_inst = TRUE){
+  $chief = '';
+  if( !empty( $cruise['ChiefScientist'])) {
+    $chief = _cp_strs_get_person_name($cruise['ChiefScientist']);
+    if( $include_inst && strlen($cruise['ChiefScientist']['InstitutionAbbr']) > 0){
+      $chief .= ' at ' . $cruise['ChiefScientist']['InstitutionAbbr'];
+    }
+  }
+  return trim($chief);
+}
+
+function _cp_strs_get_person_name($obj){
+  $name = '';
+  if(strlen($obj['LastName']) > 0){
+    $name .= $obj['LastName'];
+  } else {
+    $name .= '&lt;Unknown Last Name&gt;';
+  }
+  $name .= ', ';
+  if(strlen($obj['FirstName']) > 0){
+    $name .= $obj['FirstName'];
+  } else {
+    $name .= '&lt;Unknown First Name&gt;';
+  }
+  $name .= ' ';
+  if(strlen($obj['MiddleName']) > 0){
+    $name .= $obj['MiddleName'] . ' ';
+  }
+  return $name;
+}
+
+/*
+ * _cp_strs_get_funding
+ * 
+ * Helper function that represents all funding agencies as a string
+ */
+function _cp_strs_get_funding($cruise){
+  $funding = '';
+      
+  if( !empty( $cruise['CruiseAgencies'])) {
+    foreach($cruise['CruiseAgencies'] as $agency){
+      $funding .= '<br/> ' . $agency['FullAgencyAbbr'];
+    }
+    $funding = substr($funding, 6);
+  }
+
+  return $funding;
+}
+
+/*
+ * _cp_strs_get_date
+ * 
+ * Helper function that turns date from UNOLS cruise schedule into a string
+ */
+function _cp_strs_get_date($cruise_date, $show_day = FALSE, $full_year = FALSE){
+  $date = _cp_strs_get_actual_date($cruise_date);
+  if( $show_day ){
+    return strftime("%A",$date) .', '. strftime("%B",$date) .' '. strftime("%d",$date) .', '. strftime("%G",$date);
+  } else if( $full_year ){
+    return strftime("%m/%d/%Y",$date);
+  }
+  return strftime("%x",$date);
+}
+
+/*
+ * _cp_strs_get_actual_date
+ * 
+ * Helper function that turns date from UNOLS cruise schedule into a usable date 
+ */
+function _cp_strs_get_actual_date($cruise_date){
+  $dash_count = substr_count($cruise_date, '-');
+  $time_offset = 2 + $dash_count; //trailing zeros (usually 3), assume there will always be at least one dash for the time zone
+  $dash = strrpos($cruise_date, '-', SCHEDULE_DATE_OFFSET+1); //add '1' to offset in case of negative number for Date
+  return substr($cruise_date, SCHEDULE_DATE_OFFSET, $dash - $time_offset - SCHEDULE_DATE_OFFSET);
+}
+
+
+/*
+ * _cp_strs_schedule_title
+ * 
+ * Get string representation for a UNOLS schedule 
+ */
+function _cp_strs_schedule_title($cruises){
+  $title = STRS_TITLE . ': ';
+  if( array_key_exists('Name', $cruises) && strlen($cruises['Name']) > 0 ){
+    $title .= $cruises['Name'] . ' for ';
+  }
+  if( array_key_exists('Ship', $cruises) && strlen($cruises['Ship']) > 0 ){
+    $title .=  $cruises['Ship'];
+  }
+  return $title;
+}
+
+/* 
+ * _cp_strs_schedule_sort
+ * 
+ * Allow the table showing cruises for a UNOLS schedule to be sorted
+ */
+function _cp_strs_schedule_sort($a, $b){
+    
+    $cmp = 0;
+    if( $_REQUEST['order'] == 'Chief Scientist'){
+      $cmp = strcmp(_cp_strs_get_chief_scientist($a), _cp_strs_get_chief_scientist($b));
+    } elseif ( $_REQUEST['order'] == 'Dates'){
+      $cmp = bccomp(_cp_strs_get_actual_date($a['StartDate']), _cp_strs_get_actual_date($b['StartDate']));
+    }
+    if( $_REQUEST['sort'] != 'asc'){
+      return -1 * $cmp;
+    }
+    return $cmp;
+}
+

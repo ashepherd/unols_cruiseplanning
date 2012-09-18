@@ -1,0 +1,435 @@
+<?php
+
+define('PERMISSION_SUBMIT_CRUISE', 'submit cruise plans');
+define('PERMISSION_REVIEW_CRUISE', 'review cruise plans');
+define('PERMISSION_COMPLETE_CRUISE', 'complete cruise plans');
+
+define('CRUISE_STATUS_IN_PROGRESS', 'In Progress');
+define('CRUISE_STATUS_SUBMITTED', 'Submitted');
+define('CRUISE_STATUS_REVIEWED', 'Reviewed');
+define('CRUISE_STATUS_COMPLETED', 'Completed');
+
+
+
+
+
+function cp_status_permission() {
+  return array(
+    PERMISSION_SUBMIT_CRUISE => array(
+      'title' => t('Submit Cruise Plans'),
+      'description' => t('Mark cruise plans as Submitted.'),
+    ),
+    PERMISSION_REVIEW_CRUISE => array(
+      'title' => t('Review Cruise Plans'),
+      'description' => t('Mark cruise plans as Reviewed'),
+    ),
+    PERMISSION_COMPLETE_CRUISE => array(
+      'title' => t('Complete Cruise Plans'),
+      'description' => t('Mark cruise plans as Completed'),
+    ),
+  );
+}
+
+function cp_status_menu() {
+  $items['node/%/promote'] = array(
+    'title' => 'Promote',
+    'page callback' => 'cp_status_promote_cruise',
+    'page arguments' => array(1), 
+    'access callback' => 'cp_status_is_cruise_user',
+    'access arguments' => array(1,2),
+    'type' => MENU_CALLBACK,
+  );
+  $items['node/%/demote'] = array(
+    'title' => 'Demote',
+    'page callback' => 'cp_status_promote_cruise',
+    'page arguments' => array(1, FALSE), 
+    'access callback' => 'cp_status_is_cruise_user',
+    'access arguments' => array(1,2),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+function cp_status_form_cruise_node_form_alter(&$form, $form_state, $form_id){
+  $path = current_path();
+  $is_cloning = strstr($path, '/clone');
+  
+  if( $is_cloning ){
+    //reset the status field to be In Progress
+    $form['field_cruise_status']['und']['#default_value'] = taxonomy_get_term_by_name(CRUISE_STATUS_IN_PROGRESS, TAXONOMY_CRUISE_STATUS);
+  }
+  
+  $form['field_cruise_status']['#access'] = FALSE;
+}
+
+function cp_status_set_cruise_status(&$cruise){
+  $progress = taxonomy_get_term_by_name(CRUISE_STATUS_IN_PROGRESS, TAXONOMY_CRUISE_STATUS);
+  $cruise->field_cruise_status['und']['0']['target_id'] = key($progress);
+}
+
+/* * ***
+ * cp_status_cruise_status
+ * 
+ * return the taxonomy term associated to the given cruise's status
+ * 
+ * *** */
+function cp_status_cruise_status($cruise) {
+  if( is_numeric($cruise) ){
+    $cruise = node_load($cruise);
+  }
+  if (!$cruise) {
+    return NULL;
+  }
+
+  $status = $cruise->field_cruise_status['und']['0']['target_id'];
+  if (!$status) {
+    return NULL;
+  }
+
+  $terms = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_CRUISE_STATUS)->vid);
+  foreach ($terms as $key => $term) {
+    if ($status == $term->tid) {
+      //current status
+      return $term;
+    }
+  }
+  return NULL;
+}
+
+function cp_status_print_status($cruise){
+  
+  $status = cp_status_cruise_status($cruise);
+  drupal_add_css(drupal_get_path('module', 'cp_status') . '/cp_status.css');
+  $html = '<fieldset class="field-group-fieldset form-wrapper"><legend><span class="fieldset-legend">Cruise Status</span></legend><div class="fieldset-wrapper">';
+  if( $status ) {
+    $html .= 'Current Status: <strong>' . $status->name . '</strong><br/><br/>';
+  }
+  $html .= cp_status_print_cruise_status($cruise, $status);
+  $html .= '</div></fieldgroup>';
+  echo $html;
+}
+
+function cp_status_is_in_progress($cruise){
+  return _cp_status_is_status($cruise, CRUISE_STATUS_IN_PROGRESS);
+}
+function cp_status_is_submitted($cruise){
+  return _cp_status_is_status($cruise, CRUISE_STATUS_SUBMITTED);
+}
+function cp_status_is_reviewed($cruise){
+  return _cp_status_is_status($cruise, CRUISE_STATUS_REVIEWED);
+}
+function cp_status_is_completed($cruise){
+  return _cp_status_is_status($cruise, CRUISE_STATUS_COMPLETED);
+}
+
+function _cp_status_is_status($cruise, $status_name){
+  $status = cp_status_cruise_status($cruise);
+  return $status_name == $status->name;
+}
+
+/* * ***
+ * cp_status_is_cruise_user
+ * 
+ * return the taxonomy term associated to the given cruise's status
+ * 
+ * *** */
+
+function cp_status_is_cruise_user($cruise_id, $op) {
+  global $user;
+
+  $permission = cp_utils_is_cruise_member($cruise_id);
+  if( $permission ){
+
+    $cruise = node_load($cruise_id);
+    $status = cp_status_cruise_status($cruise);
+    
+    if( $op == 'promote' ){
+      if( $status->name == CRUISE_STATUS_IN_PROGRESS ){
+        return user_access(PERMISSION_SUBMIT_CRUISE);
+      } else if( $status->name == CRUISE_STATUS_SUBMITTED ){
+        return user_access(PERMISSION_REVIEW_CRUISE);
+      } else if( $status->name == CRUISE_STATUS_REVIEWED ){
+        $complete = user_access(PERMISSION_COMPLETE_CRUISE);
+        return $complete;
+      }
+    } else if( $op == 'demote' ){
+      if( $status->name == CRUISE_STATUS_COMPLETED ){
+        return user_access(PERMISSION_COMPLETE_CRUISE);
+      } else if( $status->name == CRUISE_STATUS_REVIEWED ){
+        return user_access(PERMISSION_REVIEW_CRUISE);
+      } else if( $status->name == CRUISE_STATUS_SUBMITTED ){
+        return user_access(PERMISSION_SUBMIT_CRUISE);
+      }
+    }
+  }
+  
+  drupal_set_message('You don\'t have the necessary privileges to '.$op.' this cruise');
+  return FALSE;
+}
+
+function cp_status_button($form, &$form_state, $button_name, $cruise, $promotion = TRUE){
+  $action = $promotion ? 'promote' : 'demote';
+  $form['#action'] = url('node/' . $cruise. '/'.$action);
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t($button_name),
+  );
+  return $form;
+}
+
+function cp_status_print_cruise_status(&$cruise, $term, $link_to_checklist = TRUE) {
+  if( is_numeric($cruise) ){
+    $cruise = node_load($cruise);
+  }
+  
+  if (cp_utils_cruise_overview_access($cruise)) {
+
+    $html = '';
+    switch($term->name){
+      case CRUISE_STATUS_IN_PROGRESS:{
+        $required = cp_status_get_required_fields($cruise);
+        $missing_count = 0;
+        foreach ($required as $field) {
+          if ($field['missing'] == TRUE) {
+            $missing_count++;
+          }
+        }
+        if ($missing_count == 0) {
+          return drupal_render(drupal_get_form('cp_status_button', 'Submit for Review', $cruise->nid));
+        }
+
+        return '<span class="cruise-not-ready">Not Ready (<a href="/node/'.$cruise->nid.'/checklist">'. $missing_count . ' missing fields</a>)</span>';
+        break;
+      }
+      case CRUISE_STATUS_SUBMITTED:{
+        $permission = user_access(PERMISSION_REVIEW_CRUISE);
+        if ($permission && cp_status_can_cruise_be_reviewed($cruise)) {
+          $html .= drupal_render(drupal_get_form('cp_status_button', 'Submit as Reviewed', $cruise->nid));
+        } else if( $permission ) {
+          $html .= '<span class="cruise-not-ready">Not Ready for Review</span>';
+        } 
+
+        if( $permission ){
+          $html .= drupal_render(drupal_get_form('cp_status_button', 'Revert to In Progress', $cruise->nid, FALSE));
+        }
+        break;
+      }
+      case CRUISE_STATUS_REVIEWED:{
+        $permission = user_access(PERMISSION_COMPLETE_CRUISE);
+        if ($permission && cp_status_can_cruise_be_completed($cruise)) {
+          $html .= drupal_render(drupal_get_form('cp_status_button', 'Submit as Complete', $cruise->nid));
+        } else if( $permission ) {
+          $html .= '<span class="cruise-not-ready">Not Ready for Completion</span>';
+        }
+
+        if( $permission ){
+          $html .= drupal_render(drupal_get_form('cp_status_button', 'Revert to Submitted', $cruise->nid, FALSE));
+        }
+        break;
+      }
+      case CRUISE_STATUS_COMPLETED:{
+        if( user_access(PERMISSION_COMPLETE_CRUISE) ){
+          $html .= drupal_render(drupal_get_form('cp_status_button', 'Revert to Reviewed', $cruise->nid, FALSE));
+        }
+        break;
+      }
+    }
+  } 
+  return $html;
+}
+
+function cp_status_promote_cruise($cruise_id, $promotion = TRUE) {
+  
+  $status = cp_status_cruise_status($cruise_id);
+  $cruise = node_load($cruise_id);
+  $new_status = NULL;
+  if( $promotion ){
+    $new_status = cp_status_get_next_status($status);
+  } else {
+    $new_status = cp_status_get_previous_status($status);
+  }
+  
+  $cruise->field_cruise_status['und'][0]['target_id'] = $new_status->tid;
+  node_save($cruise);
+  $msg = $cruise->title . ' has been set to '. $new_status->name;
+  
+  drupal_set_message($msg);
+}
+
+function cp_status_get_next_status($status) {
+  if (!isset($status)) {
+    return NULL;
+  }
+  $terms = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_CRUISE_STATUS)->vid);
+  $next_status = FALSE;
+  foreach ($terms as $term) {
+    if ($next_status) {
+      return $term;
+    }
+    if ($term->tid == $status->tid) {
+      $next_status = TRUE;
+    }
+  }
+  return $status;
+}
+
+function cp_status_get_previous_status($status) {
+  if (!isset($status)) {
+    return NULL;
+  }
+  $terms = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_CRUISE_STATUS)->vid);
+  $previous_status = FALSE;
+  foreach ($terms as $term) {
+    if ($term->tid == $status->tid) {
+      return $previous_status;
+    }
+    $previous_status = $term;
+  }
+  return $status;
+}
+
+
+function cp_status_can_cruise_be_reviewed(&$cruise) {
+  return TRUE;
+}
+
+function cp_status_can_cruise_be_completed(&$cruise) {
+  if( empty($cruise->field_cruise_id) ){
+    drupal_set_message('Please specify the cruise ID: '.l($cruise->title, 'node/'.$cruise->nid.'/edit'),'error');
+    return FALSE;
+  }
+  return TRUE;
+}
+
+function cp_status_can_cruise_be_submitted(&$cruise) {
+
+  $required = cp_status_get_required_fields($cruise);
+  foreach ($required as $field) {
+    if ($field['missing'] == TRUE) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+function cp_status_get_required_fields(&$cruise) {
+
+  //get a list of all required fields from the checklist
+  $required_fields = _cp_field_info_get_required_fields();
+
+  $ready = FALSE;
+  $required = array();
+
+  $has_chief_sci = FALSE;
+  $chief_sci = '';
+  $term_chief_sci = taxonomy_get_term_by_name(TERM_CHIEF_SCI, TAXONOMY_CRUISE_PARTY_ROLES);
+  
+  if( $term_chief_sci ){
+    $term_chief_sci = key($term_chief_sci);
+  } else {
+    $site_email = variable_get('site_mail', '');
+    drupal_set_message('\'Chief Scientist\' is missing from Cruise Party Roles. Please contact the Site Administrator' . ( $site_email ? (' at <a href="mailto:'.$site_email . '">'.$site_email.'</a>.') : '.' ) );
+    $term_chief_sci = '-1';
+  }
+  $funding = '';
+  $has_funding_award = FALSE;
+  $has_required_fields = empty($required_fields) ? FALSE : TRUE;
+      
+  //check if required fields have a value
+  $cruise_content = _cp_utils_get_cruise_content($cruise->nid);
+  if ($cruise_content && !empty($cruise_content)) {
+
+    foreach ($cruise_content as $content) {
+      $required_value = '';
+      $content_required = $has_required_fields ? array_key_exists($content->node_type, $required_fields) : FALSE;
+      $node = NULL;
+      if ($content->node_type == 'cruise_party_member') {
+
+        $node = node_load($content->nid);
+        if (!empty($node->field_cruise_party_member_role)) {
+          $roles = $node->field_cruise_party_member_role['und'];
+          foreach ($roles as $role) {
+            if ($role['target_id'] == $term_chief_sci) {
+              $chief_sci .= ', ' . $node->field_cruise_party_member_name['und']['0']['value'];
+              $has_chief_sci = TRUE;
+            }
+          }
+        }
+      } else if ($content->node_type == 'funding') {
+
+        $node = node_load($content->nid);
+        if (!empty($node->field_award_number)) {
+          $has_funding_award = !empty($node->field_funding_agency);
+          if ($has_funding_award) {
+            $t = taxonomy_term_load($node->field_funding_agency['und']['0']['tid']);
+            $funding .= ', ' . $t->name;
+          }
+        }
+      }
+
+      if ($content_required) {
+        if (!$node) {
+          $node = node_load($content->nid);
+          node_build_content($node);
+        }
+
+        $fields = $required_fields[$content->node_type];
+        foreach ($fields as $reqd_field => $field_id) {
+          //remove the field from the array so we know which fields haven't been iterated
+          unset($required_fields[$content->node_type][$reqd_field]);
+          
+          $val = NULL;
+          $exists = array_key_exists($reqd_field, $node->content);
+          if($exists){
+            $val = $node->content[$reqd_field]['0']['#markup'];
+          }
+
+          $instance = field_info_instance('node', $reqd_field, $content->node_type);
+          $required[] = array(
+            'node' => $content->node_type,
+            'name' => $instance['label'],
+            'link' => 'node/' . $content->nid . '/edit',
+            'field' => $reqd_field,
+            'value' => $val,
+            'missing' => !$exists,
+          );
+        }
+      }
+    }
+  }
+
+  foreach($required_fields as $type => $fields){
+    foreach($fields as $field_name => $instance_id){
+      $instance = field_info_instance('node', $field_name, $type);
+      $link = $type == 'cruise_plan' ? 'node/' . $cruise->nid .'/cruise-plan' : 'node/' . $cruise->nid;
+      $required[] = array(
+        'node' => $type,
+        'name' => $instance['label'],
+        'link' => $link,
+        'field' => $field_name,
+        'value' => '',
+        'missing' => TRUE,
+      );
+    }
+  }
+
+  
+  $required[] = array(
+    'node' => 'cruise_party_member',
+    'name' => 'Chief Scientist',
+    'link' => 'node/' . $cruise->nid . '/members',
+    'field' => 'field_cruise_party_member_role',
+    'value' => substr($chief_sci, 2),
+    'missing' => !$has_chief_sci,
+  );
+  $required[] = array(
+    'node' => 'funding',
+    'name' => 'Funding Award #',
+    'link' => 'node/' . $cruise->nid . '/funding',
+    'field' => 'field_award_number',
+    'value' => substr($funding, 2),
+    'missing' => !$has_funding_award,
+  );
+  
+  return $required;
+}

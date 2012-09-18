@@ -1,0 +1,217 @@
+<?php
+
+/*
+ * Doesn't handle multiple value items with grace
+ */
+
+function cp_diff_latest($node) {
+    
+  $revisions = node_revision_list($node);
+  $new = array_shift($revisions);
+  $old = array_shift($revisions);
+  $old_node = node_load($node->nid, $old->vid);
+  $new_node = node_load($node->nid, $new->vid);
+  
+  $diffs = cp_diff_diff_nodes($old_node, $new_node);
+  $result = array();
+  foreach($diffs as $diff){
+    //see diff.module::diff_get_rows()
+    $a = is_array($diff['#old']) ? $diff['#old'] : explode("\n", $diff['#old']);
+    $b = is_array($diff['#new']) ? $diff['#new'] : explode("\n", $diff['#new']);
+    $d = new Diff($a, $b);
+    
+    foreach ($d->edits as $edit) {
+      $type = $edit->type;
+      if ($type != 'copy') {
+        
+        if( $diff['#new'] == '' ){
+          $type = 'remove';
+        } else if($diff['#old'] == ''){
+          $type = 'add';
+        }
+        
+        $result[$diff['#field']] = array(
+          'name' => $diff['#name'],
+          'op' => $type,
+          'old' => drupal_render(field_view_field('node', $old_node, $diff['#field'])),
+          'new' => drupal_render(field_view_field('node', $new_node, $diff['#field'])),
+        );
+      }
+    }
+  }
+
+  return $result;
+}
+
+function cp_diff_view_changes($changes){
+  $output = '';
+  if( !empty($changes) ){
+    $output .= "The following changes were made:\n\n";
+    $count = 1;
+    foreach($changes as $field_name => $change){
+      $output .= "\n".$count.') ';
+      switch($change['op']){
+        case 'add':{
+          $output .= "Added '".$change['new']."'\n";
+          break;
+        }
+        case 'remove':{
+          $output .= "Removed '".$change['old']."'\n";
+          break;
+        }
+        default:{
+          $output .= "Changed '".$change['name']."' to\n";
+          $output .= str_replace($change['name'].':', '', $change['new'])."\nFROM\n";
+          $output .= str_replace($change['name'].':', '', $change['old'])."\n";
+          break;
+        }
+      }
+      $count++;
+    }
+  }  
+  return $output;
+}
+
+/*
+ * node.inc from project 'diff'
+ * adds 1 new entry to the result:
+ * 
+ * '#field' => $field_name,
+ */
+function cp_diff_diff_nodes($old_node, $new_node) {
+  
+  $result = array();
+  $type = node_type_get_type($new_node);
+  $result['title'] = array(
+    '#name' => $type->title_label,
+    '#old' => array($old_node->title),
+    '#new' => array($new_node->title),
+    '#weight' => -5,
+    '#format' => array(
+      'show_header' => FALSE,
+    )
+  );
+  
+  $values = _cp_diff_get_value_names();
+
+  // @TODO: abstract this to work with all field types and/or split this
+  // integration out to be more generic.
+  $instances = field_info_instances('node', field_extract_bundle('node', $type));
+  foreach ($instances as $instance) {
+    $field_name = $instance['field_name'];
+    $langcode = field_language('node', $new_node, $field_name);
+    if (isset($new_node->{$field_name}[$langcode])) {
+      
+      //check if the deltas don't match
+      $new_count = count($new_node->{$field_name}[$langcode]);
+      $old_count = count($old_node->{$field_name}[$langcode]);
+      
+      
+      $delta_match = $new_count == $old_count;
+      if( !$delta_match ){
+        
+        if( $new_count > $old_count ){
+          $result["{$field_name}"] = array(
+            '#name' => $instance['label'],
+            '#field' => $field_name,
+            '#old' => $old_count,
+            '#new' => $new_count,
+          );
+        } else {
+          $result["{$field_name}"] = array(
+            '#name' => $instance['label'],
+            '#field' => $field_name,
+            '#old' => $old_count,
+            '#new' => $new_count,
+          );
+        }
+        
+        continue;
+      }
+      
+      foreach (array_keys($new_node->{$field_name}[$langcode]) as $delta) {
+        foreach($values as $value){
+          
+          $hasValue = _cp_diff_value_exist($new_node, $old_node, $field_name, $langcode, $delta, $value);
+          if( $hasValue['new'] || $hasValue['old'] ){
+            
+            if($hasValue['new'] && $hasValue['old']) {
+              $view_old = $old_node->{$field_name}[$langcode][$delta][$value];
+              $view_new = $new_node->{$field_name}[$langcode][$delta][$value];
+              $result["{$field_name}_{$delta}"] = array(
+                '#name' => $instance['label'],
+                '#field' => $field_name,
+                '#old' => explode("\n", $view_old),
+                '#new' => explode("\n", $view_new),
+              );
+            }
+            elseif ($hasValue['new'] ) {
+              // We have a newly input value where there was none in the previous
+              // version of the node.
+              $view_new = $new_node->{$field_name}[$langcode][$delta][$value];
+              $result["{$field_name}_{$delta}"] = array(
+                '#name' => $instance['label'],
+                '#field' => $field_name,
+                '#old' => '',
+                '#new' => explode("\n", $view_new),
+              );
+            }
+            elseif ($hasValue['old']) {
+              // We have a value that has been removed from the field.
+              $view_old = $old_node->{$field_name}[$langcode][$delta][$value];
+              $result["{$field_name}_{$delta}"] = array(
+                '#name' => $instance['label'],
+                '#field' => $field_name,
+                '#old' => explode("\n", $view_old),
+                '#new' => '',
+              );
+            }
+            break;
+          }
+        }
+      }
+    }
+    elseif (isset($old_node->{$field_name}[$langcode])) {
+      // We have a value that has been removed from the field.
+      foreach (array_keys($old_node->{$field_name}[$langcode]) as $delta) {
+        
+        foreach($values as $value){
+          $hasValue = _cp_diff_value_exist($new_node, $old_node, $field_name, $langcode, $delta, $value);
+          
+          if ($hasValue['old']) {
+            $view_old = $old_node->{$field_name}[$langcode][$delta][$value];
+            $result["{$field_name}_{$delta}"] = array(
+              '#name' => $instance['label'],
+              '#field' => $field_name,
+              '#old' => explode("\n", $view_old),
+              '#new' => '',
+            );
+          }
+          break;
+        }
+      }
+    }
+  }
+  return $result;
+}
+
+function _cp_diff_value_exist($new_node, $old_node, $field_name, $langcode, $delta, $value){
+  
+  return array(
+    'new' => isset($new_node->{$field_name}[$langcode][$delta][$value]),
+    'old' => isset($old_node->{$field_name}[$langcode][$delta][$value]),
+  );
+}
+
+function _cp_diff_get_value_names(){
+  $names = variable_get('cp_diff_value_names');
+  if( empty($names) ){
+    $names = array(
+      'value',       //default value for most fields
+      'target_id',   //entity_reference, reference
+      'lat', 'lng',  //geolocation
+      'filesize',    //file
+    );
+  }
+  return $names;
+}

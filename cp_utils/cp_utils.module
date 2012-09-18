@@ -545,12 +545,12 @@ function cp_utils_prepare_cruise_for_cloning($cruise){
 }
 
 function cp_utils_port_select($form, &$form_state) {
-
+  /*
   $dropdown_array = cp_utils_ports_dropdown();
   
   $form['field_departure_port']['und']['#options'] = $dropdown_array;
   $form['field_arrival_port']['und']['#options'] = $dropdown_array;
-  
+  */
   return $form;
 }
 
@@ -559,10 +559,6 @@ function cp_utils_ports_dropdown(){
   $dropdown_array = array('0' => '--none--');
   foreach ($dropdown_source as $item) {
     $name = $item->name;
-    if( $item->field_country ){
-      $country = taxonomy_term_load($item->field_country['und']['0']['target_id']);
-      $name .= ', ' . $country->name;
-    }
     $key = $item->tid;
     $value = $name;
     $dropdown_array[$key] = $value;

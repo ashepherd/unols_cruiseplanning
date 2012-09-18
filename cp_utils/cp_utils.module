@@ -377,7 +377,7 @@ function cp_utils_form_cruise_plan_node_form_alter(&$form, $form_state, $form_id
   drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
   _cp_utils_remove_form_buttons($form);
   $form['actions']['submit']['#submit'][] = 'cp_utils_cruise_plan_submit';
-  $form['#after_build'][] = 'cp_utils_port_select';
+  //$form['#after_build'][] = 'cp_utils_port_select';
   $form['#attached']['css'] = array(drupal_get_path('module', 'cp_utils') . '/cp_utils_vertical-tabs.css');
   
   $form['actions']['submit']['#validate'][] = 'cp_utils_cruise_plan_validate';

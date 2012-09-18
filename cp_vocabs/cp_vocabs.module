@@ -149,7 +149,7 @@ function cp_vocabs_taxonomy_term_presave($term) {
 
   //guid is a property attached to taxonomy terms by taxonomy_xml
   if ($term->guid) {
-
+    $ns = cp_vocabs_rdf_namespaces();
     if ($term->type == $ns['skos'] . 'Concept') {
 
       if ($term->predicates && !empty($term->predicates)) {

@@ -205,7 +205,7 @@ function cp_strs_import_form($form, &$form_state, $scheduleID, $cruiseID, $cruis
     '#default_value' => _cp_strs_get_cruise_title($cruise, $schedule),
   );
   
-  $options = cp_utils_ports_dropdown();
+  $options = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_PORTS)->vid);//cp_utils_ports_dropdown();
   
   $form['start_port'] = array(
     '#type' => 'select',

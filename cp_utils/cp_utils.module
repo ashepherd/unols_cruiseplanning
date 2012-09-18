@@ -32,6 +32,9 @@ define('OPERATOR_ROLES', 'operator roles');
 
 define('EDIT_CRUISE_PLAN_TITLE','Cruise Plan');
 define('EDIT_CRUISE_INSTRUMENTS_TITLE','Cruise Instruments');
+define('EDIT_CRUISE_FUNDING_TITLE','Cruise Funding');
+define('EDIT_CRUISE_PARTY_TITLE','Cruise Party');
+define('EDIT_CRUISE_STATIONS_TITLE','Cruise Stations');
 define('EDIT_CRUISE_TITLE','Cruise Info');
 define('EDIT_CRUISE_TITLE_LONG','Cruise Information');
 
@@ -247,6 +250,10 @@ function cp_utils_node_access($node, $op, $account){
         }
       }
     }
+    
+    if( $op != 'view' && !cp_utils_is_cruise_member($cruise)){
+      return NODE_ACCESS_DENY;
+    }
   }
   return NODE_ACCESS_ALLOW;
 }
@@ -357,9 +364,16 @@ function _cp_utils_remove_form_buttons(&$form){
 function cp_utils_form_cruise_node_form_alter(&$form, $form_state, $form_id){
   $path = current_path();
   $is_cloning = strstr($path, '/clone');
+  $is_strs = strstr($path, 'unols/schedule');
   
+  //hide cruise ID field from regular users
   if(!cp_utils_is_operator()){
     $form['field_cruise_id']['#access'] = FALSE;
+  }
+  
+  if( !$is_strs && !cp_utils_is_super_user() ){
+    //hide the UNOLS Schedule ID
+    $form['field_unols_schedule_id']['#access'] = FALSE;
   }
   
   if( $is_cloning ){
@@ -403,17 +417,17 @@ function cp_utils_views_query_alter(&$view, &$query){
 }
 
 function cp_utils_form_funding_node_form_alter(&$form, $form_state, $form_id){
-  //drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
+  drupal_set_title(EDIT_CRUISE_FUNDING_TITLE);
   _cp_utils_remove_form_buttons($form);
 }
 
 function cp_utils_form_cruise_party_member_node_form_alter(&$form, $form_state, $form_id){
-  //drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
+  drupal_set_title(EDIT_CRUISE_PARTY_TITLE);
   _cp_utils_remove_form_buttons($form);
 }
 
 function cp_utils_form_cruise_station_node_form_alter(&$form, $form_state, $form_id){
-  //drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
+  drupal_set_title(EDIT_CRUISE_STATIONS_TITLE);
   _cp_utils_remove_form_buttons($form);
 }
 
@@ -421,16 +435,35 @@ function cp_utils_form_cruise_station_node_form_alter(&$form, $form_state, $form
  * Hide fields that don't need to be edited
  */
 function cp_utils_form_alter(&$form, &$form_state, $form_id) {
- 
-  $valid_form = ($form_id == 'user_profile_form' || 
+
+  $path = current_path();
+  //only hide if it's not the STRS Import
+  if( !strstr($path, 'unols/schedule') ){
+  
+    //HIDE OG fields
+    $valid_form = ($form_id == 'user_profile_form' || 
                 (array_key_exists('type', $form) && in_array($form['type']['#value'], cp_utils_get_cruise_content_types()) ) )
                 && 
                 array_key_exists(OG_AUDIENCE_FIELD, $form);
   
-  if( $valid_form ){
-    $form[OG_AUDIENCE_FIELD]['#access'] = FALSE;
+    if( $valid_form ){
+      $form[OG_AUDIENCE_FIELD]['#access'] = FALSE;
+    }
+
+    if( !cp_utils_is_super_user() ){
+      switch($form_id){
+        case 'funding_node_form':{
+          $form['field_project_id']['#access'] = FALSE;
+          $form['field_ship_request_id']['#access'] = FALSE;
+          break;
+        }
+        case 'cruise_party_member_node_form':{
+          $form['field_unols_id']['#access'] = FALSE;
+          break;
+        }
+      }
+    }
   }
-  
 }
 
 function cp_utils_cruise_plan_validate($form, &$form_state){

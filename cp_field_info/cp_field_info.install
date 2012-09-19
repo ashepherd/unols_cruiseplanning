@@ -1,8 +1,9 @@
 <?php
+define('CP_FIELD_INFO_TABLE', 'cp_field_info');
 
 function cp_field_info_schema(){
 
-  $schema['cp_field_info'] = array(
+  $schema[CP_FIELD_INFO_TABLE] = array(
 
     'description' => 'The base table for a cruise plan field info',
     'fields' => array(
@@ -43,4 +44,10 @@ function cp_field_info_schema(){
 
 function cp_field_info_install(){
   db_query("UPDATE {system} SET weight = 70 WHERE name = 'cp_field_info'");
+}
+
+function cp_field_info_uninstall(){
+  if( db_table_exists(CP_FIELD_INFO_TABLE)) {
+    db_drop_table(CP_FIELD_INFO_TABLE);
+  }
 }

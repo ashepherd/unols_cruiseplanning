@@ -5,5 +5,7 @@ package = "Cruise Planning"
 version = "7.x-1.0"
 
 dependencies[] = diff
+dependencies[] = field_permissions
+dependencies[] = cp_utils
 
 files[]  = cp_diff.module

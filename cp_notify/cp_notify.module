@@ -53,6 +53,7 @@ function cp_notify_email($params){
     
     $subject = '['.$site_name.'] ';
     $body = cp_utils_get_url('node/'.$cruise->nid)." \n\n";
+    $body_operator = cp_utils_get_url('node/'.$cruise->nid)." \n\n";
     
     $op = $params['action'];
     
@@ -65,8 +66,11 @@ function cp_notify_email($params){
         $subject .= 'A new '.$node_type.' has been added';
         $subject .= $is_cruise ? '' : ' to '.$cruise->title;
         
-        $body .= 'Added by '.cp_utils_get_user_name($account). ' on ' . format_date(time());
-        $body .= "\n\n".drupal_render(node_view($node));
+        $add_change= 'Added by '.cp_utils_get_user_name($account). ' on ' . format_date(time());
+        $add_change .= "\n\n".drupal_render(node_view($node));
+        
+        $body .= $add_change;
+        $body_operator .= $add_change;
         
         break;
       
@@ -86,6 +90,19 @@ function cp_notify_email($params){
           if( strlen($changes) > 0 ){
             $body .= "\n\n".$changes;
           } else {
+            //don't notify if nothing changed
+            $body = '';
+          }
+          
+          if( $notify_ops ){
+            $changes_ops = cp_diff_view_changes(cp_diff_latest($node), cp_diff_get_operator_role());
+            if( strlen($changes_ops) > 0 ){
+              $body_operator .= "\n\n".$changes_ops;
+            } else {
+              //don't notify if nothing changed
+              return;
+            }
+          } else if( strlen($body) <= 0 ){
             //don't notify if nothing changed
             return;
           }
@@ -107,8 +124,11 @@ function cp_notify_email($params){
           $subject .=  'for '.$cruise->title;
         }
         
-        $body .= 'Deleted by '.cp_utils_get_user_name($account). ' on ' . format_date(time());
-        $body .= "\n\n".drupal_render(node_view($node));
+        $delete_change .= 'Deleted by '.cp_utils_get_user_name($account). ' on ' . format_date(time());
+        $delete_change .= "\n\n".drupal_render(node_view($node));
+        
+        $body .= $delete_change;
+        $body_operator .= $delete_change;
         
         break;
       
@@ -122,11 +142,12 @@ function cp_notify_email($params){
     
     $params['subject'] = $subject;
     $params['body'] = $body;
-
-    if( $notify_editors ){
+    
+    if( strlen($body) > 0 && $notify_editors ){
       _cp_notify_send_emails($cruise_editors,$from, $params);
     }
     if( $notify_ops ){
+      $params['body'] = $body_operator;
       _cp_notify_send_emails($operators,$from, $params);
     }
   }

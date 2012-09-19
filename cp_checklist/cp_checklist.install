@@ -1,8 +1,9 @@
 <?php
+define('CP_CHECKLIST_TABLE', 'cp_checklist');
 
 function cp_checklist_schema(){
 
-  $schema['cp_checklist'] = array(
+  $schema[CP_CHECKLIST_TABLE] = array(
 
     'description' => 'The base table for external cruise plan checklist',
     'fields' => array(
@@ -59,3 +60,8 @@ function cp_checklist_schema(){
   return $schema;
 }
 
+function cp_checklist_uninstall(){
+  if( db_table_exists(CP_CHECKLIST_TABLE)) {
+    db_drop_table(CP_CHECKLIST_TABLE);
+  }
+}

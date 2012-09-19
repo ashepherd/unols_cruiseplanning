@@ -1,8 +1,10 @@
 <?php
 
+define('CP_NOTIFY_TABLE', 'cp_notify');
+
 function cp_notify_schema(){
 
-  $schema['cp_notify'] = array(
+  $schema[CP_NOTIFY_TABLE] = array(
 
     'description' => 'The base table for external cruise plan invitations',
     'fields' => array(
@@ -31,7 +33,7 @@ function cp_notify_schema(){
         'not null' => TRUE,
         'size' => 'big',
         'translatable' => TRUE,
-      ), //see the way variabel_set works @ http://api.drupal.org/api/drupal/includes%21bootstrap.inc/function/variable_set/7
+      ), //see the way variable_set works @ http://api.drupal.org/api/drupal/includes%21bootstrap.inc/function/variable_set/7
       'created' => array(
         'description' => 'The Unix timestamp when the invite was created.',
         'type' => 'int',
@@ -54,3 +56,8 @@ function cp_notify_schema(){
   return $schema;
 }
 
+function cp_notify_uninstall(){
+  if( db_table_exists(CP_NOTIFY_TABLE)) {
+    db_drop_table(CP_NOTIFY_TABLE);
+  }
+}

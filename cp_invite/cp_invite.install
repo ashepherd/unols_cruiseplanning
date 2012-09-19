@@ -1,8 +1,10 @@
 <?php
 
+define('CP_INVITE_TABLE', 'cp_invite');
+
 function cp_invite_schema(){
 
-  $schema['cp_invite'] = array(
+  $schema[CP_INVITE_TABLE] = array(
 
     'description' => 'The base table for external cruise plan invitations',
     'fields' => array(
@@ -66,3 +68,8 @@ function cp_invite_schema(){
   return $schema;
 }
 
+function cp_invite_uninstall(){
+  if( db_table_exists(CP_INVITE_TABLE)) {
+    db_drop_table(CP_INVITE_TABLE);
+  }
+}

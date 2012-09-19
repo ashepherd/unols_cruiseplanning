@@ -658,8 +658,8 @@ function _cp_strs_save_cruise($strs, $values){
   
   
   if ( !form_get_errors() ){
-    //$msgs = drupal_get_messages('status',TRUE);
-    //drupal_goto('node/'.$cruise->nid);
+    $msgs = drupal_get_messages('status',TRUE);
+    drupal_goto('node/'.$cruise->nid);
   }
 }
 

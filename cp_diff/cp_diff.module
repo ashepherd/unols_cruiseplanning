@@ -32,6 +32,7 @@ function cp_diff_latest($node) {
         
         $result[$diff['#field']] = array(
           'name' => $diff['#name'],
+          'permission' => $diff['#permission'],
           'op' => $type,
           'old' => drupal_render(field_view_field('node', $old_node, $diff['#field'])),
           'new' => drupal_render(field_view_field('node', $new_node, $diff['#field'])),
@@ -39,34 +40,99 @@ function cp_diff_latest($node) {
       }
     }
   }
-
   return $result;
 }
 
-function cp_diff_view_changes($changes){
+function cp_diff_get_operator_role(){
+  return array_shift(cp_utils_operator_roles());
+}
+
+function cp_diff_find_a_user_with_role($role){
+  if( !isset($role) ){
+    $role = cp_diff_get_operator_role();
+  }
+  $query = db_select('users', 'u');
+  $query->join('users_roles', 'r', 'u.uid = r.uid'); // JOIN users with users_roles
+  $query->join('role', 'role', 'r.rid = role.rid'); // JOIN users with users_roles
+  $query->fields('u',array('name')); // SELECT the fields from users
+  $query->condition('u.status', 1, '=');
+  $query->condition('role.name', $role,'='); // WHERE role is 3
+  $query->range(0,1);
+  
+  $result = $query->execute()->fetchAssoc();
+  $user = array_shift($result);
+
+  if( isset($user) ){
+    return $user;
+  } 
+  
+  return FALSE;
+}
+
+function cp_diff_find_authenticated_user(){
+  $subquery = db_select('users', 'u'); 
+  $subquery->join('users_roles', 'r', 'u.uid = r.uid');
+  $subquery->fields('u',array('uid')); 
+
+  $query = db_select('users', 'u');
+  $query->fields('u',array('name'));
+  $query->condition('u.status', 1, '=');
+  $query->condition('u.uid',$subquery, 'NOT IN');
+  $result = $query->execute();
+  $query->range(0,1);
+  
+  $result = $query->execute()->fetchAssoc();
+  $user = array_shift($result);
+
+  if( isset($user) ){
+    return $user;
+  } 
+  
+  return FALSE;
+}
+
+function cp_diff_view_changes($changes, $role = 'authed'){
+  global $user;
+  
   $output = '';
   if( !empty($changes) ){
+    
+    $user_with_role = cp_diff_find_a_user_with_role($role);
+    if( $role == 'authed' ){ 
+      $user_with_role = cp_diff_find_authenticated_user();   
+    }
+    $user_with_role = user_load_by_name($user_with_role);
+    
+    watchdog('cp_diff', $role, WATCHDOG_WARNING);
+    
     $output .= "The following changes were made:\n\n";
-    $count = 1;
+    $count = 0;
     foreach($changes as $field_name => $change){
-      $output .= "\n".$count.') ';
-      switch($change['op']){
-        case 'add':{
-          $output .= "Added '".$change['new']."'\n";
-          break;
+      if($change['permission'] == 0 || (user_access('view ' . $field_name, $user_with_role)) ){
+      
+        $output .= "\n".$count.') ';
+        switch($change['op']){
+          case 'add':{
+            $output .= "Added '".$change['new']."'\n";
+            break;
+          }
+          case 'remove':{
+            $output .= "Removed '".$change['old']."'\n";
+            break;
+          }
+          default:{
+            $output .= "Changed '".$change['name']."' to\n";
+            $output .= str_replace($change['name'].':', '', $change['new'])."\nFROM\n";
+            $output .= str_replace($change['name'].':', '', $change['old'])."\n";
+            break;
+          }
         }
-        case 'remove':{
-          $output .= "Removed '".$change['old']."'\n";
-          break;
-        }
-        default:{
-          $output .= "Changed '".$change['name']."' to\n";
-          $output .= str_replace($change['name'].':', '', $change['new'])."\nFROM\n";
-          $output .= str_replace($change['name'].':', '', $change['old'])."\n";
-          break;
-        }
+        $count++;
       }
-      $count++;
+      
+    }
+    if( $count == 0 ){
+      return '';
     }
   }  
   return $output;
@@ -99,6 +165,9 @@ function cp_diff_diff_nodes($old_node, $new_node) {
   $instances = field_info_instances('node', field_extract_bundle('node', $type));
   foreach ($instances as $instance) {
     $field_name = $instance['field_name'];
+    $perms = field_info_field($field_name);
+    $perms = $perms['field_permissions']['type'];
+    
     $langcode = field_language('node', $new_node, $field_name);
     if (isset($new_node->{$field_name}[$langcode])) {
       
@@ -114,6 +183,7 @@ function cp_diff_diff_nodes($old_node, $new_node) {
           $result["{$field_name}"] = array(
             '#name' => $instance['label'],
             '#field' => $field_name,
+            '#permission' => $perms,
             '#old' => $old_count,
             '#new' => $new_count,
           );
@@ -121,6 +191,7 @@ function cp_diff_diff_nodes($old_node, $new_node) {
           $result["{$field_name}"] = array(
             '#name' => $instance['label'],
             '#field' => $field_name,
+            '#permission' => $perms,
             '#old' => $old_count,
             '#new' => $new_count,
           );
@@ -141,6 +212,7 @@ function cp_diff_diff_nodes($old_node, $new_node) {
               $result["{$field_name}_{$delta}"] = array(
                 '#name' => $instance['label'],
                 '#field' => $field_name,
+                '#permission' => $perms,
                 '#old' => explode("\n", $view_old),
                 '#new' => explode("\n", $view_new),
               );
@@ -152,6 +224,7 @@ function cp_diff_diff_nodes($old_node, $new_node) {
               $result["{$field_name}_{$delta}"] = array(
                 '#name' => $instance['label'],
                 '#field' => $field_name,
+                '#permission' => $perms,
                 '#old' => '',
                 '#new' => explode("\n", $view_new),
               );
@@ -162,6 +235,7 @@ function cp_diff_diff_nodes($old_node, $new_node) {
               $result["{$field_name}_{$delta}"] = array(
                 '#name' => $instance['label'],
                 '#field' => $field_name,
+                '#permission' => $perms,
                 '#old' => explode("\n", $view_old),
                 '#new' => '',
               );
@@ -183,6 +257,7 @@ function cp_diff_diff_nodes($old_node, $new_node) {
             $result["{$field_name}_{$delta}"] = array(
               '#name' => $instance['label'],
               '#field' => $field_name,
+              '#permission' => $perms,
               '#old' => explode("\n", $view_old),
               '#new' => '',
             );

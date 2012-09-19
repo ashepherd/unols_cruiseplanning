@@ -170,13 +170,13 @@ function cp_utils_menu_alter(&$items) {
   
   //fix the views access callback for these tabs
   $items['node/%views_arg/funding']['access callback'] = 'cp_utils_cruise_plan_access';
-  $items['node/%views_arg/funding']['access arguments'] = array(1);
+  $items['node/%views_arg/funding']['access arguments'] = array(1, 2);
 
   $items['node/%views_arg/members']['access callback'] = 'cp_utils_cruise_plan_access';
-  $items['node/%views_arg/members']['access arguments'] = array(1);
+  $items['node/%views_arg/members']['access arguments'] = array(1, 2);
   
   $items['node/%views_arg/stations']['access callback'] = 'cp_utils_cruise_plan_access';
-  $items['node/%views_arg/stations']['access arguments'] = array(1);
+  $items['node/%views_arg/stations']['access arguments'] = array(1, 2);
 }
 
 function cp_utils_clone_access($node){
@@ -289,11 +289,14 @@ function cp_utils_cruise_plan_page_access($node){
   return FALSE;
 }
 
-function cp_utils_cruise_plan_access($cruise){
-  if( is_numeric($cruise) ){
-    $cruise = node_load($cruise);
+function cp_utils_cruise_plan_access($node, $tab = NULL){
+  if( is_numeric($node) ){
+    $node = node_load($node);
   }
-  return cp_utils_is_cruise_member($cruise) && !cp_status_is_completed($cruise);
+  if( $node->type != 'cruise' ){
+    return FALSE;
+  }
+  return cp_utils_is_cruise_member($node) && !cp_status_is_completed($node);
 }
 
 function cp_utils_is_super_user(){
@@ -353,7 +356,6 @@ function cp_utils_clone_process($cloned_item){
     unset($cloned_item->field_demob_date['und']);
   }
 }
-
 
 function _cp_utils_remove_form_buttons(&$form){
   unset($form['actions']['preview']);
@@ -437,12 +439,13 @@ function cp_utils_form_cruise_station_node_form_alter(&$form, $form_state, $form
 function cp_utils_form_alter(&$form, &$form_state, $form_id) {
 
   $path = current_path();
-  //only hide if it's not the STRS Import
+  
+  //only hides stuff if it's not the STRS Import
   if( !strstr($path, 'unols/schedule') ){
   
     //HIDE OG fields
     $valid_form = ($form_id == 'user_profile_form' || 
-                (array_key_exists('type', $form) && in_array($form['type']['#value'], cp_utils_get_cruise_content_types()) ) )
+        (array_key_exists('type', $form) && in_array($form['type']['#value'], cp_utils_get_cruise_content_types()) ))
                 && 
                 array_key_exists(OG_AUDIENCE_FIELD, $form);
   
@@ -462,6 +465,21 @@ function cp_utils_form_alter(&$form, &$form_state, $form_id) {
           break;
         }
       }
+    }
+  } 
+  
+  if( isset($form['#entity_type']) && $form['#entity_type'] == 'node' ){
+    if( isset($form['revision_information']) ){
+      $form['revision_information']['#prefix'] ='<div style="display:none">';
+      $form['revision_information']['#suffix'] ='</div>';
+    }
+    if( isset($form['author']) ){
+      $form['author']['#prefix'] ='<div style="display:none">';
+      $form['author']['#suffix'] ='</div>';
+    }
+    if( isset($form['options']) ){
+      $form['options']['#prefix'] ='<div style="display:none">';
+      $form['options']['#suffix'] ='</div>';
     }
   }
 }

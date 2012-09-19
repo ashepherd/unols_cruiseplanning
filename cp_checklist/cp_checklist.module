@@ -18,6 +18,10 @@ function cp_checklist_menu() {
   return $items;
 }
 
+function cp_checklist_form_milestone_node_form_alter(&$form, $form_state, $form_id){
+  _cp_utils_remove_form_buttons($form);
+}
+
 function cp_checklist_for_cruise($cruise) {
   
   drupal_set_title( t('Checklist for ' . $cruise->title) );
@@ -30,7 +34,7 @@ function cp_checklist_for_cruise($cruise) {
       'data' => t('Value'),
     ),
     array(
-      'data' => t('Missing?'),
+      'data' => t('Complete?'),
     ),
   );
 
@@ -46,7 +50,7 @@ function cp_checklist_for_cruise($cruise) {
       'data' => array(
         array('data' => l(t($field['name']), $field['link']), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'),
         array('data' => t($field['value']), 'nowrap' => 'nowrap', 'valign' => 'top'),
-        array('data' => t($field['missing'] ? 'Yes' : 'No'), 'nowrap' => 'nowrap', 'valign' => 'top', 'class' => array($field['missing'] ? 'missing' : 'supplied'),), 
+        array('data' => t($field['missing'] ? 'No' : 'Yes'), 'nowrap' => 'nowrap', 'valign' => 'top', 'class' => array($field['missing'] ? 'missing' : 'supplied'),), 
       ),
       
     );
@@ -163,6 +167,16 @@ function cp_checklist_cruise_milestones_form($form, &$form_state){
     );
   }
   
+  $dep_diff_display = 'unknown';
+  if( $departure_diff ){
+    if( (int)$departure_diff > 0 ){
+      //positive
+      $dep_diff_display = $departure_diff.' days';
+    } else {
+      $dep_diff_display = (-1 * (int)$departure_diff).' days ago';
+    }
+  }
+  
   if( $total > 0 ){
     $form['milestones'] = array(
       '#type' => 'tableselect',
@@ -172,7 +186,7 @@ function cp_checklist_cruise_milestones_form($form, &$form_state){
       '#multiple' => TRUE,
       '#default_value' => $items,
       '#attributes' => array('valign' => 'top', 'nowrap' => 'nowrap'),
-      '#prefix' => t('<h2>To-Do Checklist</h2>Mark checkboxes next to items that have been completed.<br/><strong>Days from Departure: '.($departure_diff ? $departure_diff.' days' : 'unknown').'</strong>'),
+      '#prefix' => t('<h2>To-Do Checklist</h2>Mark checkboxes next to items that have been completed.<br/><strong>Days from Departure: '.$dep_diff_display.'</strong>'),
       //'#suffix' => t('<p>['.l(t('hide completed items'), 'node/'.$cruise->nid.'/checklist?hide=incomplete').']</p>'),
     );
     

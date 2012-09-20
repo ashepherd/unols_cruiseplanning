@@ -368,6 +368,15 @@ function cp_utils_form_cruise_node_form_alter(&$form, $form_state, $form_id){
   $is_cloning = strstr($path, '/clone');
   $is_strs = strstr($path, 'unols/schedule');
   
+  $ships = array_keys(cp_utils_get_active_ships());
+  $options = $form['field_ship']['und']['#options'];
+  foreach($options as $tid => $ship){
+    if( is_numeric($tid) && !in_array($tid, $ships)){
+      unset($options[$tid]);
+    }
+  }
+  $form['field_ship']['und']['#options'] = $options;
+  
   //hide cruise ID field from regular users
   if(!cp_utils_is_operator()){
     $form['field_cruise_id']['#access'] = FALSE;
@@ -1131,6 +1140,23 @@ function _cp_utils_get_instruments($cruise_nid) {
     if( !empty($plan) ){
       return $plan['0']->nid;
     }
+  }  
+  return FALSE;
+}
+
+function cp_utils_get_active_ships() {  
+  $view = views_get_view('ships');
+  if (is_object($view)) {
+    $view->init_display();
+    $view->pre_execute();
+    $view->execute();
+    $result = $view->result;
+    $ships = array();
+    $result = array_values($result);
+    foreach($result as $ship){
+      $ships[$ship->tid] = $ship->taxonomy_term_data_name;
+    }
+    return $ships;
   }  
   return FALSE;
 }

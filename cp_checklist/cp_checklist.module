@@ -48,8 +48,8 @@ function cp_checklist_for_cruise($cruise) {
   foreach ($required as $field) {
     $rows[] = array(
       'data' => array(
-        array('data' => l(t($field['name']), $field['link']), 'nowrap' => 'nowrap', 'valign' => 'top', 'style' => 'font-weight: bold;'),
-        array('data' => t($field['value']), 'nowrap' => 'nowrap', 'valign' => 'top'),
+        array('data' => l(t($field['name']), $field['link']), 'valign' => 'top', 'style' => 'font-weight: bold;'),
+        array('data' => t($field['value']), 'valign' => 'top'),
         array('data' => t($field['missing'] ? 'No' : 'Yes'), 'nowrap' => 'nowrap', 'valign' => 'top', 'class' => array($field['missing'] ? 'missing' : 'supplied'),), 
       ),
       

@@ -67,8 +67,8 @@ function cp_strs_schedule_form($node, &$form_state) {
   //$ship_terms = taxonomy_get_tree(taxonomy_vocabulary_machine_name_load(TAXONOMY_SHIPS)->vid,0,NULL,TRUE);
   $ship_terms = cp_utils_get_active_ships();
   $ships = array();
-  foreach($ship_terms as $tid => $name){
-    $ships[$tid] = $name;
+  foreach($ship_terms as $ship){
+    $ships[$ship['unols_id']] = $ship['name'];
   }
   
   $form['ship'] = array(

@@ -1154,7 +1154,10 @@ function cp_utils_get_active_ships() {
     $ships = array();
     $result = array_values($result);
     foreach($result as $ship){
-      $ships[$ship->tid] = $ship->taxonomy_term_data_name;
+      $ships[$ship->tid] = array(
+        'name' => $ship->taxonomy_term_data_name,
+        'unols_id' => $ship->field_field_unols_id_1['0']['raw']['value'],
+      );
     }
     return $ships;
   }  

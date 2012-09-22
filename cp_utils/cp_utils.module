@@ -27,6 +27,7 @@
   break;
  * 
  */
+define('CP_UTILS_ADMIN_PERMISSION','administer modules');
 
 define('OPERATOR_ROLES', 'operator roles');
 
@@ -357,6 +358,10 @@ function cp_utils_clone_process($cloned_item){
   }
 }
 
+function cp_utils_get_admin_roles(){
+  return user_roles(TRUE, CP_UTILS_ADMIN_PERMISSION);
+}
+
 function _cp_utils_remove_form_buttons(&$form){
   unset($form['actions']['preview']);
   unset($form['actions']['delete']);
@@ -382,7 +387,7 @@ function cp_utils_form_cruise_node_form_alter(&$form, $form_state, $form_id){
     $form['field_cruise_id']['#access'] = FALSE;
   }
   
-  if( !$is_strs && !cp_utils_is_super_user() ){
+  if( !$is_strs && !cp_utils_is_operator() ){
     //hide the UNOLS Schedule ID
     $form['field_unols_schedule_id']['#access'] = FALSE;
   }
@@ -475,6 +480,36 @@ function cp_utils_form_alter(&$form, &$form_state, $form_id) {
         }
       }
     }
+    //*
+    if(!cp_utils_is_super_user()){
+      switch($form_id){
+        case 'user_register_form':
+        case 'user_profile_form':{
+          $admin_roles = array_keys(cp_utils_get_admin_roles());
+          $options = $form['account']['roles']['#options'];
+          $defaults = $form['account']['roles']['#default_value'];
+          dpm($defaults);
+          if( !empty($admin_roles) ){
+            foreach($options as $rid => $role){
+              if( in_array($rid,$admin_roles) ){
+                unset($options[$rid]);
+                if(in_array($rid,$defaults) && $form_id == 'user_profile_form' ){
+                  $form['account']['roles'][$rid] = array(
+                    '#type' => 'checkbox',
+                    '#title' => $role,
+                    '#default_value' => TRUE,
+                    '#disabled' => TRUE,
+                  );
+                }
+              }
+            }
+            $form['account']['roles']['#options'] = $options;
+          }
+          break;
+        }
+      }
+    }
+    //*/
   } 
   
   if( isset($form['#entity_type']) && $form['#entity_type'] == 'node' ){
@@ -581,19 +616,14 @@ function cp_utils_cruise_edit_redirect($cruise){
 }
 
 function cp_utils_operator_roles(){
-  if ($roles = cache_get(OPERATOR_ROLES, 'cache')) {
-    return $roles->data;
-  } else {
-    $system_roles = array('administrator', 'authenticated user', 'anonymous user');
-    $roles = user_roles();
-    foreach($roles as $key => $role){
-      if(in_array($role, $system_roles)){
-        unset($roles[$key]);
-      }
+  $system_roles = array('administrator', 'authenticated user', 'anonymous user');
+  $roles = user_roles();
+  foreach($roles as $key => $role){
+    if(in_array($role, $system_roles)){
+      unset($roles[$key]);
     }
-    cache_set(OPERATOR_ROLES, $roles, 'cache');
-    return $roles;
   }
+  return $roles;
 }
 
 /*

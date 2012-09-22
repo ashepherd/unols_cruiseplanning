@@ -102,9 +102,7 @@ function cp_diff_view_changes($changes, $role = 'authed'){
       $user_with_role = cp_diff_find_authenticated_user();   
     }
     $user_with_role = user_load_by_name($user_with_role);
-    
-    watchdog('cp_diff', $role, WATCHDOG_WARNING);
-    
+        
     $output .= "The following changes were made:\n\n";
     $count = 0;
     foreach($changes as $field_name => $change){

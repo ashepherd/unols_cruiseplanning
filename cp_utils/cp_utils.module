@@ -144,6 +144,8 @@ function cp_utils_menu() {
 
 function cp_utils_menu_alter(&$items) {
   
+  $items['node/add']['access callback'] = FALSE;
+  
   $items['node/%node/track']['type'] = MENU_CALLBACK;
   $items['node/%node/devel']['type'] = MENU_CALLBACK;
   $items['node/%node/clone']['type'] = MENU_CALLBACK;
@@ -223,40 +225,45 @@ function cp_utils_cruise_overview_access($node, $op = 'view'){
 }
 
 function cp_utils_node_access($node, $op, $account){
+  
   $allowed = node_access($node, $op, $account);
   if( $allowed == NODE_ACCESS_DENY ){
     return NODE_ACCESS_DENY;
   }
   
   $cruise_types = array('cruise','cruise_plan','cruise_instrument', 'funding', 'cruise_station', 'cruise_party_member');
+  $type = is_object($node) ? $node->type : $node;
   
-  if( in_array($node->type, $cruise_types ) ){
-    
-    //use this instead of below: $cruise = cp_utils_get_cruise_for_node($node);
-    if( $node->type != 'cruise'){
-      $cruise = node_load($node->{OG_AUDIENCE_FIELD}['und']['0']['target_id']);
-    } else {
-      $cruise = $node;
-    }
-    
-    $status = cp_status_cruise_status($cruise->nid);    
-    if( $status ){
-      if( $status->name == CRUISE_STATUS_REVIEWED && $op == 'delete' && !cp_utils_is_operator() ){
-        return NODE_ACCESS_DENY;
-      } else if( $status->name == CRUISE_STATUS_COMPLETED ){
-        if( $op == 'delete' ){
+  if( $op != 'create' ){
+    if( in_array($type, $cruise_types ) ){
+
+      //use this instead of below: $cruise = cp_utils_get_cruise_for_node($node);
+      if( $type != 'cruise'){
+        $cruise = node_load($node->{OG_AUDIENCE_FIELD}['und']['0']['target_id']);
+      } else {
+        $cruise = $node;
+      }
+
+      $status = cp_status_cruise_status($cruise->nid);    
+      if( $status ){
+        if( $status->name == CRUISE_STATUS_REVIEWED && $op == 'delete' && !cp_utils_is_operator() ){
           return NODE_ACCESS_DENY;
-        } else if( $op == 'update' && !cp_utils_is_operator() ){
-          return NODE_ACCESS_DENY;
+        } else if( $status->name == CRUISE_STATUS_COMPLETED ){
+          if( $op == 'delete' ){
+            return NODE_ACCESS_DENY;
+          } else if( $op == 'update' && !cp_utils_is_operator() ){
+            return NODE_ACCESS_DENY;
+          }
         }
+      }
+
+      if( $op != 'view' && !cp_utils_is_cruise_member($cruise)){
+        return NODE_ACCESS_DENY;
       }
     }
     
-    if( $op != 'view' && !cp_utils_is_cruise_member($cruise)){
-      return NODE_ACCESS_DENY;
-    }
   }
-  return NODE_ACCESS_ALLOW;
+  return $allowed;
 }
 
 function cp_utils_delete_access($node, $op = 'delete'){

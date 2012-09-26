@@ -3,6 +3,7 @@
 /*
  * TAXONOMIES
  */
+define('TAXONOMY_INSTRUMENTS', 'instruments');
 define('TAXONOMY_ORG', 'organization');
 define('TAXONOMY_PORTS', 'ports');
 define('TAXONOMY_COUNTRIES', 'countries');
@@ -100,14 +101,6 @@ function cp_vocabs_menu() {
   );
 
 
-  $items['unols/ports'] = array(
-    'title' => 'UNOLS Ports',
-    'type' => MENU_NORMAL_ITEM,
-    'description' => t('View list of UNOLS Ports'),
-    'access callback' => 'cp_vocabs_ports_access',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('cp_vocabs_ports_page', 0),
-  );
   $items['r2r/ports'] = array(
     'title' => 'R2R Ports',
     'type' => MENU_NORMAL_ITEM,
@@ -117,25 +110,99 @@ function cp_vocabs_menu() {
     'page arguments' => array('cp_vocabs_ports_page', 0),
   );
 
-  $items['unols/ships'] = array(
-    'title' => 'UNOLS Ships',
-    'type' => MENU_NORMAL_ITEM,
-    'description' => t('View list of UNOLS Ships'),
-    'access callback' => 'cp_vocabs_ships_access',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('cp_vocabs_ships_page', 0),
-  );
-
   $items['unols/ports/update'] = array(
     'title' => 'Update Ports',
     'type' => MENU_LOCAL_TASK,
     'description' => 'Update the ports taxonomy from the url: ' . PORTS_URL,
     'access callback' => 'cp_vocabs_ports_access',
+    'access arguments' => array(1),
     'page callback' => 'cp_vocabs_ports_consume',
+  );
+  
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name/import'] = array(
+    'title' => 'Import',
+    'type' => MENU_IS_LOCAL_TASK,
+    'access callback' => 'cp_vocabs_unols_access',
+    'access arguments' => array(3),
+    'page callback' => 'cp_vocabs_unols_page',
+    'page arguments' => array(3),
   );
 
   return $items;
 }
+
+function cp_vocabs_menu_alter(&$items){
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name']['access callback'] = 'cp_vocabs_taxonomy_access';
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name']['access arguments'] = array(3);
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name/list']['access callback'] = 'cp_vocabs_taxonomy_access';
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name/list']['access arguments'] = array(3);
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name/add']['access callback'] = 'cp_vocabs_taxonomy_access';
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name/add']['access arguments'] = array(3);
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name/add']['title callback'] = 'cp_vocabs_taxonomy_title';
+  $items['admin/structure/taxonomy/%taxonomy_vocabulary_machine_name/add']['title arguments'] = array(3);
+}
+
+function cp_vocabs_taxonomy_title($vocabulary){
+  switch($vocabulary->machine_name){
+    case TAXONOMY_SHIPS:{
+      return 'Add Ship';
+    }
+    case TAXONOMY_PORTS:{
+      return 'Add Port';
+    }
+    case TAXONOMY_INSTRUMENTS:{
+      return 'Add Instrument';
+    }
+    default:{
+      return 'Add term';
+    }
+  }
+}
+
+function cp_vocabs_unols_access($vocabulary){
+  
+  $vocabs = array(TAXONOMY_SHIPS,TAXONOMY_PORTS,TAXONOMY_INSTRUMENTS);
+  if( !isset($vocabulary) || !in_array($vocabulary->machine_name,$vocabs) ){
+    return FALSE;
+  }
+  switch($vocabulary->machine_name){
+    case TAXONOMY_SHIPS:{
+     return cp_vocabs_ships_access();
+    }
+    case TAXONOMY_PORTS:{
+     return cp_vocabs_ports_access();
+    }
+    case TAXONOMY_INSTRUMENTS:{
+      return cp_utils_is_operator();
+    }
+  }
+}
+
+function cp_vocabs_unols_page($vocabulary){
+  $vocabs = array(TAXONOMY_SHIPS,TAXONOMY_PORTS);
+  if(in_array($vocabulary->machine_name, $vocabs) ){
+    return drupal_get_form('cp_vocabs_'.$vocabulary->machine_name.'_page', 'unols');
+  } else {
+    drupal_set_message('No Instruments to import.');
+    drupal_goto('admin/structure/taxonomy/'.TAXONOMY_INSTRUMENTS);
+  }
+}
+
+function cp_vocabs_taxonomy_access($vocabulary  = NULL){
+  $access = user_access('administer taxonomy');
+  if( !is_object($vocabulary) ){
+    return $access;
+  }
+  
+  $vocabs = array(TAXONOMY_SHIPS,TAXONOMY_PORTS,TAXONOMY_INSTRUMENTS);
+  if(cp_utils_is_super_user || (cp_utils_is_operator() && in_array($vocabulary->machine_name, $vocabs)) ){
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
+
 
 function cp_vocabs_get_rdf_namespaces(){
   $ns = rdf_get_namespaces();
@@ -398,6 +465,7 @@ function cp_vocab_ships_form_submit($form, &$form_state) {
       }
     }
 
+    $was_imported = FALSE;
     foreach ($imports as $unols_id => $checked) {
       if ($checked) {
 
@@ -428,9 +496,14 @@ function cp_vocab_ships_form_submit($form, &$form_state) {
             $term->field_port['und']['0']['target_id'] = $homeports[$ships[$unols_id]['HomeportID']]->tid;
           }
           taxonomy_term_save($term);
+          drupal_set_message($term->name.' was successfully imported.');
+          $was_imported = TRUE;
         }
       }
     }
+  }
+  if($was_imported){
+    $form_state['redirect'] = 'admin/structure/taxonomy/ships';
   }
 }
 
@@ -489,6 +562,13 @@ function cp_vocabs_ports_page($provider = 'unols') {
         $info = check_plain($port['Info']);
         $uri = ''; //$wpi > 0 ? 'http://linked.rvdata.us/resource/port/' . $wpi . '?output=rdfxml' : '';
 
+        if( !empty($state) ){
+          $name .= ', '.$state;
+        }
+        if( !empty($country) ){
+          $name .= ', '.$country;
+        }
+      
         $has_term = FALSE;
 
         if (!empty($vocab)) {

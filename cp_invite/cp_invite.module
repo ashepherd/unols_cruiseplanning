@@ -353,6 +353,7 @@ function cp_invite_mail($key, &$message, $params) {
   switch ($key) {
     case 'invite':
       // note: data can be passed to this function in the $params array
+      $message['headers']['CC'] = $message['from'];
       $message['subject'] = t('['.cp_utils_get_site_name(). '] You have been invited to edit the cruise plan: ' . $cruise->title);
       $message['body'][] = t(cp_utils_get_user_name($inviter) ." has invited you to edit this cruise.\n\n".cp_utils_get_cruise_info($cruise). "\n\nTo begin work on this cruise plan, register here : " . cp_utils_get_url('register/'.$invite->access_key) );
       break; 

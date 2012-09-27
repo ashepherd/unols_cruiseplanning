@@ -223,12 +223,6 @@ function cp_admin_form_alter(&$form, $form_state, $form_id) {
    
   //CRUISE FORM
   } elseif ($form_id == 'cruise_plan_node_form' ) {
-    /*
-    $devel = drupal_get_path('module', 'devel');
-    drupal_add_css($devel .  '/devel.css');
-    drupal_add_css($devel . '/krumo/skins/orange/skin.css');
-    drupal_add_js($devel . '/krumo/krumo.js');
-    */
     
     $disabled_fields = cp_admin_get_disabled_fields($form['#entity_type'],$form['#bundle']);
     if( !empty($disabled_fields) ){
@@ -364,9 +358,7 @@ function cp_admin_manage_fields(&$form, $form_state, $form_id) {
     } else {
       //dont touch row
     }
-  }
-  
-  //dpm($form);
+  }  
 }
 
 function cp_admin_can_administer_fields($entity, $bundle, $field) {

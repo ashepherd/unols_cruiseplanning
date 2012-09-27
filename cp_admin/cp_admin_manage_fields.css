@@ -3,7 +3,7 @@
 }
 
 .cp-admin-deleted-field {
-    /* display: none; */
+    display: none;
     font-style: italic;
 }
 

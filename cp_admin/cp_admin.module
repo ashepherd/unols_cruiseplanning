@@ -74,6 +74,13 @@ function cp_admin_menu() {
     'access arguments' => array(PERMISSION_ADMINISTER_FIELDS),
     'type' => MENU_CALLBACK
   );
+  $items['cp_admin/fields/display'] = array(
+    'title' => 'Administer Cruise Plan Fields - Display',
+    'page callback' => 'cp_admin_fields_display',
+    'access callback' => 'user_access',
+    'access arguments' => array(PERMISSION_ADMINISTER_FIELDS),
+    'type' => MENU_CALLBACK
+  );
   return $items;
 }
 
@@ -104,6 +111,13 @@ function cp_admin_fields_access($bundle){
 function cp_admin_fields(){
   if(user_access(PERMISSION_ADMINISTER_FIELDS)){
     drupal_goto('admin/structure/types/manage/cruise-plan/fields');
+  }
+  return;
+}
+
+function cp_admin_fields_display(){
+  if(user_access(PERMISSION_ADMINISTER_FIELDS)){
+    drupal_goto('admin/structure/types/manage/cruise-plan/display');
   }
   return;
 }

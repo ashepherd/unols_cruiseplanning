@@ -1,0 +1,9 @@
+name =  Cruise Instruments Field
+description = "Cruise Instrument Field - An extension to the 'Boolean' (Yes/No) field type"
+package = "Cruise Planning"
+core = 7.x
+version = "7.x-1.0"
+
+
+files[] = cp_instruments.install
+files[] = cp_instruments.module

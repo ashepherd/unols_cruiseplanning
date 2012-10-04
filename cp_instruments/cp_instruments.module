@@ -1,0 +1,204 @@
+<?php
+
+define('CP_INSTRUMENT_WIDGET_TYPE', 'options_instrument');
+define('CP_INSTRUMENT_LABEL', 'Instrument Checkbox');
+
+/**
+ * Implements hook_field_widget_info().
+ *
+ * Field type modules willing to use those widgets should:
+ * - Use hook_field_widget_info_alter() to append their field own types to the
+ *   list of types supported by the widgets,
+ * - Implement hook_options_list() to provide the list of options.
+ * See list.module.
+ */
+function cp_instruments_field_widget_info() {
+  return array(
+    CP_INSTRUMENT_WIDGET_TYPE => array(
+      'label' => t(CP_INSTRUMENT_LABEL),
+      'field types' => array(),
+      'behaviors' => array(
+        'multiple values' => FIELD_BEHAVIOR_CUSTOM,
+      ),
+      'settings' => array('display_label' => 1),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_settings_form().
+ */
+function cp_instruments_field_widget_settings_form($field, $instance) {
+  $form = array();
+  if ($instance['widget']['type'] == CP_INSTRUMENT_WIDGET_TYPE) {
+    $form['display_label'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Use field label instead of the "On value" as label'),
+      '#default_value' => $instance['widget']['settings']['display_label'],
+      '#weight' => -1,
+    );
+  }
+  return $form;
+}
+
+/**
+ * Implements hook_field_widget_info_alter().
+ *
+ * The List module does not implement widgets of its own, but reuses the
+ * widgets defined in options.module.
+ *
+ * @see list_options_list()
+ */
+function cp_instruments_field_widget_info_alter(&$info) {
+  $widgets = array(
+    CP_INSTRUMENT_WIDGET_TYPE => array('list_boolean'),
+  );
+
+  foreach ($widgets as $widget => $field_types) {
+    $info[$widget]['field types'] = array_merge($info[$widget]['field types'], $field_types);
+  }
+}
+
+function cp_instruments_field_formatter_info_alter(&$info){
+  $info['list_default']['module'] = 'cp_instruments';
+}
+
+/**
+ * Implements hook_field_settings_form().
+ */
+function cp_instruments_field_settings_form($field, $instance, $has_data) {
+  $settings = $field['settings'];
+
+  switch ($field['type']) {
+    case 'list_boolean':
+      $values = $settings['allowed_values'];
+      $off_value = array_shift($values);
+      $on_value = array_shift($values);
+
+      $form['allowed_values'] = array(
+        '#type' => 'value',
+        '#description' => '',
+        '#value_callback' => 'list_boolean_allowed_values_callback',
+        '#access' => empty($settings['allowed_values_function']),
+      );
+      $form['allowed_values']['on'] = array(
+        '#type' => 'textfield',
+        '#title' => t('On value'),
+        '#default_value' => $on_value,
+        '#required' => FALSE,
+        '#description' => t('If left empty, "1" will be used.'),
+        // Change #parents to make sure the element is not saved into field
+        // settings.
+        '#parents' => array('on'),
+      );
+      $form['allowed_values']['off'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Off value'),
+        '#default_value' => $off_value,
+        '#required' => FALSE,
+        '#description' => t('If left empty, "0" will be used.'),
+        // Change #parents to make sure the element is not saved into field
+        // settings.
+        '#parents' => array('off'),
+      );
+
+      // Link the allowed value to the on / off elements to prepare for the rare
+      // case of an alter changing #parents.
+      $form['allowed_values']['#on_parents'] = &$form['allowed_values']['on']['#parents'];
+      $form['allowed_values']['#off_parents'] = &$form['allowed_values']['off']['#parents'];
+
+      break;
+  }
+
+  // Alter the description for allowed values depending on the widget type.
+  if ($instance['widget']['type'] == CP_INSTRUMENT_WIDGET_TYPE) {
+    $form['allowed_values']['#description'] .= '<p>' . t("For a '" . CP_INSTRUMENT_LABEL . "' widget, define the 'off' value first, then the 'on' value in the <strong>Allowed values</strong> section. Note that the checkbox will be labeled with the label of the 'on' value.") . '</p>';
+  }
+  $form['allowed_values']['#description'] .= '<p>' . t('Allowed HTML tags in labels: @tags', array('@tags' => _field_filter_xss_display_allowed_tags())) . '</p>';
+
+  $form['allowed_values_function'] = array(
+    '#type' => 'value',
+    '#value' => $settings['allowed_values_function'],
+  );
+  $form['allowed_values_function_display'] = array(
+    '#type' => 'item',
+    '#title' => t('Allowed values list'),
+    '#markup' => t('The value of this field is being determined by the %function function and may not be changed.', array('%function' => $settings['allowed_values_function'])),
+    '#access' => !empty($settings['allowed_values_function']),
+  );
+
+  return $form;
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function cp_instruments_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  
+  if( $instance['widget']['type'] != CP_INSTRUMENT_WIDGET_TYPE ){
+    return list_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display);
+  }
+  
+  $element = array();
+  foreach ($items as $delta => $item) {
+    if( $item['value'] == '1' ){
+      $element[$delta] = array('#markup' => field_filter_xss($instance['label']));
+    }
+  }
+
+  return $element;
+}
+
+function cp_instruments_field_display_alter(&$display, $context){
+  if( $context['instance']['widget']['type'] == CP_INSTRUMENT_WIDGET_TYPE ){
+    $display['label'] = 'hidden';
+  }
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function cp_instruments_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  // Abstract over the actual field columns, to allow different field types to
+  // reuse those widgets.
+  $value_key = key($field['columns']);
+  $type = str_replace('options_', '', $instance['widget']['type']);
+  $multiple = $field['cardinality'] > 1 || $field['cardinality'] == FIELD_CARDINALITY_UNLIMITED;
+  $required = $element['#required'];
+  $has_value = isset($items[0][$value_key]);
+  $properties = _options_properties($type, $multiple, $required, $has_value);
+
+  // Prepare the list of options.
+  $options = _options_get_options($field, $instance, $properties);
+
+  // Put current field values in shape.
+  $default_value = _options_storage_to_form($items, $options, $value_key, $properties);
+
+  switch ($type) {
+    case 'instrument':
+      $keys = array_keys($options);
+      $off_value = array_shift($keys);
+      $on_value = array_shift($keys);
+      $element += array(
+        '#type' => 'checkbox',
+        '#default_value' => (isset($default_value[0]) && $default_value[0] == $on_value) ? 1 : 0,
+        '#on_value' => $on_value,
+        '#off_value' => $off_value,
+      );
+      // Override the title from the incoming $element.
+      $element['#title'] = isset($options[$on_value]) ? $options[$on_value] : '';
+
+      if ($instance['widget']['settings']['display_label']) {
+        $element['#title'] = $instance['label'];
+      }
+      break;
+  }
+
+  $element += array(
+    '#value_key' => $value_key,
+    '#element_validate' => array('options_field_widget_validate'),
+    '#properties' => $properties,
+  );
+
+  return $element;
+}

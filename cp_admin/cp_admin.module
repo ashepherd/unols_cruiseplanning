@@ -87,8 +87,18 @@ function cp_admin_menu() {
 function cp_admin_menu_alter(&$items) {
 
   $items['admin/structure/types/manage/%node_type/fields']['access callback'] = 'cp_admin_fields_access';
-  //$items['admin/structure/types/manage/%node_type/fields']['title callback'] = 'Cruise Plan Fields';
   $items['admin/structure/types/manage/%node_type/fields']['access arguments'] = array(4);
+  $items['admin/structure/types/manage/%node_type/display']['access callback'] = 'cp_admin_fields_access';
+  $items['admin/structure/types/manage/%node_type/display']['access arguments'] = array(4);
+  $items['admin/structure/types/manage/%node_type/display/default']['access callback'] = 'cp_admin_fields_access';
+  $items['admin/structure/types/manage/%node_type/display/default']['access arguments'] = array(4);
+  $items['admin/structure/types/manage/%node_type/display/full']['access callback'] = 'cp_admin_fields_access';
+  $items['admin/structure/types/manage/%node_type/display/full']['access arguments'] = array(4);
+  
+  $items['admin/structure/types/manage/%node_type/fields']['title'] = 'Fields';
+  $items['admin/structure/types/manage/%node_type/display']['title'] = 'Display';
+  
+  
   $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu']['access callback'] = 'cp_admin_fields_access';
   $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu']['access arguments'] = array(4);
   $items['admin/structure/types/manage/%node_type/fields/%field_ui_menu/edit']['access callback'] = 'cp_admin_fields_access';

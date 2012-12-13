@@ -412,12 +412,18 @@ function cp_utils_form_cruise_node_form_alter(&$form, $form_state, $form_id){
 
 function cp_utils_form_cruise_plan_node_form_alter(&$form, $form_state, $form_id){
   drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
-  _cp_utils_remove_form_buttons($form);
-  $form['actions']['submit']['#submit'][] = 'cp_utils_cruise_plan_submit';
-  //$form['#after_build'][] = 'cp_utils_port_select';
-  $form['#attached']['css'] = array(drupal_get_path('module', 'cp_utils') . '/cp_utils_vertical-tabs.css');
   
   $form['actions']['submit']['#validate'][] = 'cp_utils_cruise_plan_validate';
+  
+  _cp_utils_remove_form_buttons($form);
+  $form['actions']['submit']['#submit'][] = 'cp_utils_cruise_plan_submit';
+  $form['actions']['save_and_next'] = $form['actions']['submit'];
+  $form['actions']['save_and_next']['#value'] = 'Save & Next =>';
+  $form['actions']['save_and_next']['#weight'] = 10;
+  
+  //$form['#after_build'][] = 'cp_utils_port_select';
+  
+  $form['#attached']['css'] = array(drupal_get_path('module', 'cp_utils') . '/cp_utils_vertical-tabs.css');
 }
 
 function cp_utils_form_cruise_instrument_node_form_alter(&$form, $form_state, $form_id){
@@ -565,16 +571,20 @@ function cp_utils_cruise_plan_validate($form, &$form_state){
 }
 
 function cp_utils_cruise_plan_submit($form, &$form_state){
-    
+  
   $cruise = $form_state['values'][OG_AUDIENCE_FIELD]['und']['0']['target_id'];
   if( empty($cruise) ){
     $cruise = cp_utils_get_cruise_for_node($form_state['node']);
   }
   if( !empty($cruise) ){
+
+    $notNext = $form_state['clicked_button']['#value'] != 'Save & Next =>';
     
     $path = 'node/'.$cruise;
-    if(cp_status_is_in_progress($cruise)){
-      $path .= '/cruise-plan';
+    if(cp_status_is_in_progress($cruise) || $notNext){
+      if(!$notNext){
+        $path .= '/cruise-plan';
+      }
       $menu = cp_utils_local_tasks($path);    
       $tab = cp_utils_next_tab($menu);
       if( $tab ){

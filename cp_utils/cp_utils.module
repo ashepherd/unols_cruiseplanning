@@ -412,12 +412,33 @@ function cp_utils_form_cruise_node_form_alter(&$form, $form_state, $form_id){
 
 function cp_utils_form_cruise_plan_node_form_alter(&$form, $form_state, $form_id){
   drupal_set_title(EDIT_CRUISE_PLAN_TITLE);
+ 
+  $field_start = 'field_';
+  $field_len = strlen($field_start);
+  foreach($form as $key => $element){
+    if( !strncmp($key, $field_start, $field_len) && isset($element[LANGUAGE_NONE]) ){ 
+      if( isset($element[LANGUAGE_NONE]['#required']) && $element[LANGUAGE_NONE]['#required'] ){
+        //un-require any required fields - IMPORT UNOLS STRS 
+        $form[$key][LANGUAGE_NONE]['#required'] = FALSE; 
+      } else if( isset($element[LANGUAGE_NONE]['#type']) && 'radios' == $element[LANGUAGE_NONE]['#type'] && isset($element[LANGUAGE_NONE]['#options']['_none']) && 'N/A' == $element[LANGUAGE_NONE]['#options']['_none'] ){
+        //don't show the N/A option 
+        unset($form[$key][LANGUAGE_NONE]['#options']['_none']);
+      }
+    }
+  }
+
+
+  $form['actions']['submit']['#validate'][] = 'cp_utils_cruise_plan_validate';
+  
   _cp_utils_remove_form_buttons($form);
   $form['actions']['submit']['#submit'][] = 'cp_utils_cruise_plan_submit';
-  //$form['#after_build'][] = 'cp_utils_port_select';
-  $form['#attached']['css'] = array(drupal_get_path('module', 'cp_utils') . '/cp_utils_vertical-tabs.css');
+  $form['actions']['save_and_next'] = $form['actions']['submit'];
+  $form['actions']['save_and_next']['#value'] = 'Save & Next =>';
+  $form['actions']['save_and_next']['#weight'] = 10;
   
-  $form['actions']['submit']['#validate'][] = 'cp_utils_cruise_plan_validate';
+  //$form['#after_build'][] = 'cp_utils_port_select';
+  
+  $form['#attached']['css'] = array(drupal_get_path('module', 'cp_utils') . '/cp_utils_vertical-tabs.css');
 }
 
 function cp_utils_form_cruise_instrument_node_form_alter(&$form, $form_state, $form_id){
@@ -495,7 +516,7 @@ function cp_utils_form_alter(&$form, &$form_state, $form_id) {
           $admin_roles = array_keys(cp_utils_get_admin_roles());
           $options = $form['account']['roles']['#options'];
           $defaults = $form['account']['roles']['#default_value'];
-          dpm($defaults);
+          //dpm($defaults);
           if( !empty($admin_roles) ){
             foreach($options as $rid => $role){
               if( in_array($rid,$admin_roles) ){
@@ -565,16 +586,20 @@ function cp_utils_cruise_plan_validate($form, &$form_state){
 }
 
 function cp_utils_cruise_plan_submit($form, &$form_state){
-    
+  
   $cruise = $form_state['values'][OG_AUDIENCE_FIELD]['und']['0']['target_id'];
   if( empty($cruise) ){
     $cruise = cp_utils_get_cruise_for_node($form_state['node']);
   }
   if( !empty($cruise) ){
+
+    $notNext = $form_state['clicked_button']['#value'] != 'Save & Next =>';
     
     $path = 'node/'.$cruise;
-    if(cp_status_is_in_progress($cruise)){
-      $path .= '/cruise-plan';
+    if(cp_status_is_in_progress($cruise) || $notNext){
+      if(!$notNext){
+        $path .= '/cruise-plan';
+      }
       $menu = cp_utils_local_tasks($path);    
       $tab = cp_utils_next_tab($menu);
       if( $tab ){

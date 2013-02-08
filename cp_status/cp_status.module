@@ -378,6 +378,12 @@ function cp_status_get_required_fields(&$cruise) {
           //remove the field from the array so we know which fields haven't been iterated
           unset($required_fields[$content->node_type][$reqd_field]);
           
+          //ignore any deleted/disabled fields
+          $disabled = _cp_admin_is_field_disabled('node',$content->node_type,$reqd_field);
+          if( $disabled ){ 
+            continue;
+          }
+ 
           $val = NULL;
           $exists = array_key_exists($reqd_field, $node->content);
           if($exists){

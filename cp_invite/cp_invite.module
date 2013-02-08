@@ -77,7 +77,7 @@ function cp_invite_action_permission($cruise, $invite, $action){
 
 function cp_invite_title_page($cruise = NULL){
   if( empty($cruise) ){
-    return 'Cruise Plan Invitiations';
+    return 'Cruise Plan Invitations';
   }
   
   return $cruise->title . ': Invitations';
@@ -174,7 +174,7 @@ function cp_invite_page_form($form, &$form_state, $cruise){
     '#options' => $rows,
     '#empty' => t('No invitations'),
     '#multiple' => TRUE,
-    '#prefix' => t('['.l(t('New Invitiation'),'node/'.$cruise->nid.'/editors', 
+    '#prefix' => t('['.l(t('New Invitation'),'node/'.$cruise->nid.'/editors', 
         array('query' => array( 'destination' => 'node/'.$cruise->nid.'/invitations') ) ).']'),
     '#attributes' => array('valign' => 'top', 'nowrap' => 'nowrap'),
   );
@@ -195,7 +195,7 @@ function cp_invite_page_form($form, &$form_state, $cruise){
     '#value' => 'Delete Invitations',
     '#validate' => array('cp_invite_page_validate'),
     '#submit' => array('cp_invite_page_submit'),
-    '#attributes' => array('onclick' => "if(confirm('Are you sure you want to delete the selected invitiations?')) return true; return false;"),
+    '#attributes' => array('onclick' => "if(confirm('Are you sure you want to delete the selected invitations?')) return true; return false;"),
   );
   
   $form['actions']['cancel'] = array(
@@ -266,7 +266,7 @@ function _cp_invite_page_headers(){
       'nowrap' => 'nowrap',
     ),
     'ops' => array(
-      'data' => 'Resend Invitiation?',
+      'data' => 'Resend Invitation?',
       'nowrap' => 'nowrap',
     ),
   );

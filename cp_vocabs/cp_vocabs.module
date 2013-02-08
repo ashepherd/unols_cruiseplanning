@@ -195,7 +195,7 @@ function cp_vocabs_taxonomy_access($vocabulary  = NULL){
   }
   
   $vocabs = array(TAXONOMY_SHIPS,TAXONOMY_PORTS,TAXONOMY_INSTRUMENTS);
-  if(cp_utils_is_super_user || (cp_utils_is_operator() && in_array($vocabulary->machine_name, $vocabs)) ){
+  if(cp_utils_is_super_user() || (cp_utils_is_operator() && in_array($vocabulary->machine_name, $vocabs)) ){
     return TRUE;
   }
   return FALSE;

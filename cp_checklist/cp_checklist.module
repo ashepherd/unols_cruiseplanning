@@ -157,7 +157,8 @@ function cp_checklist_cruise_milestones_form($form, &$form_state){
     $rows[$milestone->nid] = array(
       
       'item' => array('data' => t($milestone->node_title), 'nowrap' => 'nowrap', 'valign' => 'top'), 
-      'desc' => array('data' => t($desc), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      //'desc' => array('data' => t($desc), 'nowrap' => 'nowrap', 'valign' => 'top'), 
+      'desc' => array('data' => t($desc), 'valign' => 'top'),
       'days' => array(
         'data' => t($milestone->field_field_days_from_departure['0']['rendered']['#markup']), 
         'nowrap' => 'nowrap', 
